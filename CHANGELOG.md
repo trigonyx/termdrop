@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.0 – 2026-10-14
+
+- Shared core termcore and one profile for termchat, keyrace and termdrop
+- Friends' profile colors wherever people are colored
+
 ## 1.0.0 – 2026-10-14
 
 - termdrop skeleton: keyrace's core, friends and discovery on ports 5054/5055
