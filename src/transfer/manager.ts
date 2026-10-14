@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { MAX_FRAME } from '../core/framing.js';
+import { MAX_FRAME } from 'termcore/net/framing';
 import { encodeWire, type RejectReason, type Wire } from '../core/protocol.js';
 import { toEntry, type HistoryEntry } from './history.js';
 import type { DataLink } from './link.js';
@@ -47,6 +47,8 @@ export interface TransferDeps {
   /** accepted and not blocked – only friends can send us files */
   isFriend(id: string): boolean;
   isTrusted(id: string): boolean;
+  /** do not disturb: offers wait under Requests – no toast, no automatic accept, even from trusted friends */
+  quiet?(): boolean;
   nameOf(id: string): string;
   /** true if we opened the friend session – then we open the data connections too */
   dialsData(id: string): boolean;
@@ -325,14 +327,18 @@ export class TransferManager {
       this.deps.notify('termdrop', `Declined ${name}'s ${label} – not enough free space`);
       return;
     }
-    if (this.deps.isTrusted(from)) {
+    const quiet = this.deps.quiet?.() ?? false;
+    if (this.deps.isTrusted(from) && !quiet) {
       this.deps.toast(`Receiving ${filesLabel(m.files)} from ${name} (${formatBytes(m.total)})`, 'info');
       this.deps.notify('termdrop', `Receiving ${filesLabel(m.files)} from ${name}`);
       this.accept(m.xid, true);
       return;
     }
-    this.deps.toast(`${name} wants to send you ${label}`, 'info');
-    this.deps.notify('termdrop', `${name} wants to send you ${label}`);
+    // do not disturb: the offer just waits under Requests
+    if (!quiet) {
+      this.deps.toast(`${name} wants to send you ${label}`, 'info');
+      this.deps.notify('termdrop', `${name} wants to send you ${label}`);
+    }
     this.deps.changed();
   }
 

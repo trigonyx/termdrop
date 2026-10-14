@@ -8,11 +8,11 @@ import { inspectPaths, showPath, type LocalFile } from '../../transfer/local.js'
 import { expandHome, resolvePastedPaths } from '../../transfer/paste.js';
 import { formatBytes, plural } from '../../transfer/units.js';
 import { completePath } from '../complete.js';
-import { emptyEditor, type EditorState } from '../editor.js';
-import { Footer } from '../components/Footer.js';
-import { InputBox } from '../components/InputBox.js';
-import { usePaste, useWheel } from '../mouse.js';
-import { icons, theme } from '../theme.js';
+import { emptyEditor, type EditorState } from 'termcore/ui/editor';
+import { Footer } from 'termcore/ui/components/Footer';
+import { InputBox } from 'termcore/ui/components/InputBox';
+import { usePaste, useWheel } from 'termcore/ui/mouse';
+import { icons, theme } from 'termcore/ui/theme';
 
 interface Props {
   store: AppStore;

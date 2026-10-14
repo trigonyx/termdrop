@@ -1,5 +1,5 @@
 import type { Paths } from '../core/paths.js';
-import { appendJsonl, readJsonl } from '../core/storage.js';
+import { appendJsonl, readJsonl, writeJsonlAtomic } from 'termcore/app/storage';
 import type { OfferFile } from './offer.js';
 import type { Dir, FinalStatus, Transfer } from './session.js';
 
@@ -82,6 +82,13 @@ export class HistoryBook {
 
   all(): HistoryEntry[] {
     return this.entries;
+  }
+
+  /** A friend has a new id (they migrated to ~/.termhub): their past transfers move with them. */
+  rekey(oldId: string, newId: string): void {
+    if (!this.entries.some((e) => e.peerId === oldId)) return;
+    this.entries = this.entries.map((e) => (e.peerId === oldId ? { ...e, peerId: newId } : e));
+    writeJsonlAtomic(this.paths.transfers, this.entries);
   }
 
   get(xid: string): HistoryEntry | undefined {

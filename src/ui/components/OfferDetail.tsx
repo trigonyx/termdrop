@@ -3,7 +3,7 @@ import { tildify } from '../../core/paths.js';
 import type { AppStore } from '../../core/store.js';
 import type { Transfer } from '../../transfer/session.js';
 import { formatBytes, plural } from '../../transfer/units.js';
-import { icons, theme } from '../theme.js';
+import { icons, theme } from 'termcore/ui/theme';
 
 /** Rows the panel takes for `visibleFiles` file lines, border included. */
 export function offerDetailHeight(offer: Transfer, maxFiles: number): number {

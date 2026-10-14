@@ -4,9 +4,9 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { expect } from 'vitest';
-import { FrameSocket } from '../src/core/framing.js';
-import { performHandshake } from '../src/core/handshake.js';
-import { loadOrCreateIdentity } from '../src/core/identity.js';
+import { FrameSocket } from 'termcore/net/framing';
+import { performHandshake } from 'termcore/net/handshake';
+import { loadOrCreateIdentity } from 'termcore/net/identity';
 import { resolvePaths, type Paths } from '../src/core/paths.js';
 import { AppStore, type StoreOptions } from '../src/core/store.js';
 import { DataLink } from '../src/transfer/link.js';
@@ -82,9 +82,12 @@ export async function linkPair(xid = 'xidxidxidxidxid1'): Promise<{ sender: Data
   const srv = await accepted;
   const a = new FrameSocket(client);
   const b = new FrameSocket(srv);
-  const alice = loadOrCreateIdentity(resolvePaths(tmpDir('id')));
-  const bob = loadOrCreateIdentity(resolvePaths(tmpDir('id')));
-  const [ha, hb] = await Promise.all([performHandshake(a, alice, 'Alice', true, 5000, xid), performHandshake(b, bob, 'Bob', false)]);
+  const alice = loadOrCreateIdentity(path.join(tmpDir('id'), 'identity.json'));
+  const bob = loadOrCreateIdentity(path.join(tmpDir('id'), 'identity.json'));
+  const [ha, hb] = await Promise.all([
+    performHandshake(a, { protocol: 'termdrop/1', me: alice, myName: 'Alice', initiator: true, xid }),
+    performHandshake(b, { protocol: 'termdrop/1', me: bob, myName: 'Bob', initiator: false }),
+  ]);
   expect(hb.xid).toBe(xid);
   return { sender: new DataLink(a, ha, xid), receiver: new DataLink(b, hb, xid), close: () => server.close() };
 }

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { sanitizeText } from '../core/sanitize.js';
+import { sanitizeText } from 'termcore/app/sanitize';
 
 /** Suffix of files still being received. They're renamed only once their hash matched. */
 export const PART_SUFFIX = '.termdrop-part';

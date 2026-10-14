@@ -1,24 +1,25 @@
 import { Box, Text, useApp, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { registry } from '../commands/builtin.js';
-import { loadConfig } from '../core/identity.js';
 import type { Paths } from '../core/paths.js';
 import { AppStore, type StoreOptions } from '../core/store.js';
 import { checkForUpdate } from '../core/update.js';
+import { VERSION } from '../core/version.js';
 import type { Inbox } from '../transfer/handoff.js';
 import type { LocalFile } from '../transfer/local.js';
 import { filesLabel } from '../transfer/units.js';
 import type { Actions } from './actions.js';
-import type { DialogSpec } from './components/Dialog.js';
-import { Header } from './components/Header.js';
-import { Panel } from './components/Panel.js';
-import { useStoreVersion, useTerminalSize } from './hooks.js';
-import { mouse } from './mouse.js';
+import type { DialogSpec } from 'termcore/ui/components/Dialog';
+import { Header } from 'termcore/ui/components/Header';
+import { Panel } from 'termcore/ui/components/Panel';
+import { useStoreVersion, useTerminalSize } from 'termcore/ui/hooks';
+import { mouse } from 'termcore/ui/mouse';
 import { Dashboard, type DashFocus } from './screens/Dashboard.js';
 import { FilePicker } from './screens/FilePicker.js';
-import { Onboarding } from './screens/Onboarding.js';
+import { Onboarding } from 'termcore/ui/components/Onboarding';
+import { LOGO_SMALL } from './components/Banner.js';
 import { RecipientPicker } from './screens/RecipientPicker.js';
-import { theme } from './theme.js';
+import { theme } from 'termcore/ui/theme';
 
 type Phase = { name: 'onboarding' } | { name: 'starting' } | { name: 'ready'; store: AppStore } | { name: 'error'; message: string };
 
@@ -30,10 +31,21 @@ export interface Flow {
   to?: string;
 }
 
-export function Root({ paths, options, inbox }: { paths: Paths; options: Omit<StoreOptions, 'paths'>; inbox?: Inbox }) {
+export function Root({
+  paths,
+  options,
+  inbox,
+  notice,
+}: {
+  paths: Paths;
+  options: Omit<StoreOptions, 'paths'>;
+  inbox?: Inbox;
+  /** shown once the app runs (e.g. that the profile moved to ~/.termhub) */
+  notice?: string;
+}) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
-  const [phase, setPhase] = useState<Phase>(() => (loadConfig(paths) ? { name: 'starting' } : { name: 'onboarding' }));
+  const [phase, setPhase] = useState<Phase>(() => (AppStore.hasProfile(paths) ? { name: 'starting' } : { name: 'onboarding' }));
   const storeRef = useRef<AppStore | null>(null);
   const quitting = useRef(false);
 
@@ -55,6 +67,7 @@ export function Root({ paths, options, inbox }: { paths: Paths; options: Omit<St
       try {
         const store = new AppStore({ paths, ...options });
         await store.start();
+        if (notice) store.showToast(notice, 'success');
         if (cancelled) return void store.stop();
         storeRef.current = store;
         setPhase({ name: 'ready', store });
@@ -71,7 +84,15 @@ export function Root({ paths, options, inbox }: { paths: Paths; options: Omit<St
   const height = Math.max(10, rows - 1);
 
   if (phase.name === 'onboarding') {
-    return <Onboarding paths={paths} width={columns} onDone={() => setPhase({ name: 'starting' })} />;
+    return (
+      <Onboarding
+        logo={LOGO_SMALL}
+        tagline="encrypted file sharing with friends on your network"
+        width={columns}
+        create={(name) => AppStore.createProfile(paths, name)}
+        onDone={() => setPhase({ name: 'starting' })}
+      />
+    );
   }
   if (phase.name === 'starting') {
     return (
@@ -277,7 +298,15 @@ export function Main({
 
   return (
     <Box flexDirection="column" width={width} height={height}>
-      <Header store={store} width={width} />
+      <Header
+        app="termdrop"
+        version={VERSION}
+        width={width}
+        me={store.me}
+        address={store.me.ips[0] ? `${store.me.ips[0]}:${store.me.port}` : 'no network'}
+        online={store.onlineCount()}
+        updateAvailable={store.updateAvailable}
+      />
       {body}
     </Box>
   );

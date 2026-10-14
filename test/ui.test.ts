@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import stringWidth from 'string-width';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseAddress, registry } from '../src/commands/builtin.js';
-import { parseCommand, tokenize } from '../src/commands/parse.js';
+import { parseCommand, tokenize } from 'termcore/ui/commands/parse';
 import { resolvePaths } from '../src/core/paths.js';
 import { AppStore } from '../src/core/store.js';
 import { VERSION } from '../src/core/version.js';
@@ -13,14 +13,14 @@ import type { Transfer } from '../src/transfer/session.js';
 import type { Actions } from '../src/ui/actions.js';
 import { Main } from '../src/ui/App.js';
 import { LOGO, LOGO_SMALL } from '../src/ui/components/Banner.js';
-import { Header } from '../src/ui/components/Header.js';
+import { Header } from 'termcore/ui/components/Header';
 import { completePath } from '../src/ui/complete.js';
-import { cleanPaste, edit, layoutEditor } from '../src/ui/editor.js';
-import { emitPaste, extractMouse } from '../src/ui/mouse.js';
+import { cleanPaste, edit, layoutEditor } from 'termcore/ui/editor';
+import { emitPaste, extractMouse } from 'termcore/ui/mouse';
 import { Dashboard } from '../src/ui/screens/Dashboard.js';
 import { FilePicker } from '../src/ui/screens/FilePicker.js';
 import { RecipientPicker } from '../src/ui/screens/RecipientPicker.js';
-import { renderText } from '../src/ui/text.js';
+import { renderText } from 'termcore/ui/text';
 import { tmpDir } from './helpers.js';
 
 const strip = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, '');
@@ -187,7 +187,7 @@ describe('screens', () => {
   it('header shows the app version, name and friends online', () => {
     const s = store('Max');
     for (const width of [100, 50]) {
-      const r = render(createElement(Header, { store: s, width }));
+      const r = render(createElement(Header, { app: 'termdrop', version: VERSION, me: s.me, address: '10.0.0.1:5054', online: s.onlineCount(), width }));
       expect(frame(r)).toContain(`termdrop  v${VERSION}`);
       expect(frame(r)).toContain('Max');
       r.unmount();

@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAME } from '../src/core/framing.js';
+import { MAX_FRAME } from 'termcore/net/framing';
 import { encodeWire, parseLinkMsg, parseWire, type Wire } from '../src/core/protocol.js';
 import { MAX_FILES, MAX_WIRE_NAME } from '../src/transfer/offer.js';
 
 const XID = 'abcDEF123_-xyz';
 const parse = (o: unknown) => parseWire(Buffer.from(JSON.stringify(o)));
 const link = (o: unknown) => parseLinkMsg(Buffer.from(JSON.stringify(o)));
+
+describe('friend messages', () => {
+  it('base messages come from termcore; other apps’ messages mean nothing here', () => {
+    expect(parse({ t: 'presence', away: true })).toEqual({ t: 'presence', away: true });
+    // keyrace's "racing" and termchat's messages are dropped
+    expect(parse({ t: 'presence', away: false, racing: true })).toEqual({ t: 'presence', away: false });
+    expect(parse({ t: 'msg', id: 'abc', ts: 1, text: 'hi' })).toBeNull();
+    expect(parse({ t: 'invite', gid: 'abcdefgh', mode: 'sprint', param: 60, players: [] })).toBeNull();
+    expect(parse({ t: 'state', name: 'Bob', state: 'accepted', port: 5054, color: '#73daca' })).toMatchObject({ color: '#73daca' });
+  });
+});
 
 describe('transfer messages', () => {
   it('offer: files with sizes that add up to the total', () => {

@@ -22,7 +22,8 @@ import { acquireLock, handOff, Inbox, startHandoffServer, type Lock } from './tr
 import { inspectPaths } from './transfer/local.js';
 import { plural } from './transfer/units.js';
 import { Root } from './ui/App.js';
-import { MOUSE_OFF, MOUSE_ON, MouseFilterStdin } from './ui/mouse.js';
+import { MOUSE_OFF, MOUSE_ON, MouseFilterStdin } from 'termcore/ui/mouse';
+import { Hub, migrationNotice } from 'termcore/store/hub';
 
 const HELP = `termdrop – end-to-end encrypted file sharing with friends on your local network
 
@@ -31,7 +32,8 @@ Usage: termdrop [files…] [--to <name>] [options]
 
   files…            Send these files (if termdrop is already open, they go to that window)
   --to <name>       Preselect this friend as the recipient
-  --home <dir>      Data directory (default: ~/.termdrop, or $TERMDROP_HOME)
+  --home <dir>      Data directory (default: ~/.termhub shared by all apps plus
+                    ~/.termdrop; with --home: <dir> and <dir>/termdrop; or $TERMHUB_HOME)
   --port <port>     TCP port (default: 5054, falls back if taken)
   --no-discovery    Don't search the network automatically
   --debug           Write a connection log to <home>/termdrop.log
@@ -148,6 +150,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // first start of 2.x: identity, name and friends of all apps move into ~/.termhub
+  let notice: string | undefined;
+  try {
+    const report = Hub.prepare(paths.hub);
+    if (report.migrated) notice = migrationNotice(report.friends);
+  } catch (err) {
+    lock.release();
+    process.stderr.write(`Couldn't read your profile in ${paths.hub.dir}: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
+
   const inbox = new Inbox();
   if (files.length) inbox.push(files, to);
   try {
@@ -182,7 +195,7 @@ async function main(): Promise<void> {
   for (const sig of ['SIGTERM', 'SIGHUP'] as const) process.on(sig, () => process.exit(0));
 
   const app = render(
-    <Root paths={paths} options={{ port, discovery: !values['no-discovery'], debug: values.debug }} inbox={inbox} />,
+    <Root paths={paths} options={{ port, discovery: !values['no-discovery'], debug: values.debug }} inbox={inbox} notice={notice} />,
     { exitOnCtrlC: false, patchConsole: true, stdin: new MouseFilterStdin(process.stdin) as unknown as NodeJS.ReadStream },
   );
   app.waitUntilExit().then(

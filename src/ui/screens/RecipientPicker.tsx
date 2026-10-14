@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 import type { AppStore } from '../../core/store.js';
 import type { LocalFile } from '../../transfer/local.js';
 import { filesLabel, formatBytes, plural } from '../../transfer/units.js';
-import { Footer } from '../components/Footer.js';
-import { useWheel } from '../mouse.js';
-import { icons, theme } from '../theme.js';
+import { Footer } from 'termcore/ui/components/Footer';
+import { useWheel } from 'termcore/ui/mouse';
+import { icons, theme } from 'termcore/ui/theme';
 
 interface Props {
   store: AppStore;

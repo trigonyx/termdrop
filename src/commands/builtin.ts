@@ -1,8 +1,10 @@
 import net from 'node:net';
 import path from 'node:path';
-import { displayName } from '../core/contacts.js';
-import { formatId } from '../core/identity.js';
-import { DEFAULT_PORT } from '../core/network.js';
+import { displayName } from 'termcore/friends/book';
+import { formatId } from 'termcore/net/identity';
+import { duration, shortTime } from 'termcore/ui/format';
+import { statusText } from 'termcore/ui/presence';
+import { APP } from '../app.js';
 import { tildify } from '../core/paths.js';
 import {
   compareVersions,
@@ -19,7 +21,6 @@ import { VERSION } from '../core/version.js';
 import { showPath } from '../transfer/local.js';
 import { expandHome, splitShellWords } from '../transfer/paste.js';
 import { filesLabel, formatBytes } from '../transfer/units.js';
-import { duration, shortTime } from '../ui/format.js';
 import { CommandRegistry, type Command, type CommandContext } from './registry.js';
 
 const STATE_LABEL: Record<string, string> = {
@@ -55,7 +56,7 @@ export function parseAddress(input: string): { host: string; port: number } {
   const m = /^\[?([^\]]+?)\]?(?::(\d{1,5}))?$/.exec(input.trim());
   if (!m) throw new Error(`Invalid address: ${input}`);
   const host = m[1]!;
-  const port = m[2] ? Number(m[2]) : DEFAULT_PORT;
+  const port = m[2] ? Number(m[2]) : APP.tcpPort;
   if (port < 1 || port > 65535) throw new Error(`Invalid port: ${m[2]}`);
   if (!net.isIP(host) && !/^[a-z0-9.-]+$/i.test(host)) throw new Error(`Invalid address: ${input}`);
   return { host, port };
@@ -106,8 +107,18 @@ export const builtinCommands: Command[] = [
     run(ctx) {
       const me = ctx.store.me;
       const addr = me.ips.length ? me.ips.map((ip) => `\`${ip}:${me.port}\``).join(', ') : 'no network';
+      const status = statusText(me.status, me.statusMsg);
       ctx.ui.print(
-        `### ${me.name}\n\n- **ID** \`${formatId(me.id, true)}\`\n- **Reachable at** ${addr}\n- **Files are saved to** \`${showPath(tildify(ctx.store.downloadDir()))}\``,
+        [
+          `### ${me.name}`,
+          '',
+          `- **ID** \`${formatId(me.id, true)}\``,
+          ...(status ? [`- **Status** ${status}`] : []),
+          `- **Reachable at** ${addr}`,
+          `- **Files are saved to** \`${showPath(tildify(ctx.store.downloadDir()))}\``,
+          '',
+          '_Name, ID and friends are shared by termchat, keyrace and termdrop (~/.termhub)._',
+        ].join('\n'),
       );
     },
   },
@@ -115,7 +126,7 @@ export const builtinCommands: Command[] = [
     name: 'name',
     usage: '<new name>',
     minArgs: 1,
-    description: 'Change your display name',
+    description: 'Change your display name (in all apps)',
     scope: 'global',
     run(ctx, _args, rest) {
       const name = ctx.store.setName(rest);
@@ -191,7 +202,7 @@ export const builtinCommands: Command[] = [
         `### ${f.display}${f.alias ? ` _(calls themselves ${f.name})_` : ''}`,
         '',
         `- **ID** \`${formatId(f.id, true)}\``,
-        `- **Status** ${f.away ? 'away' : f.online ? 'online' : 'offline'} · ${STATE_LABEL[f.state] ?? f.state}${f.trusted ? ' · ★ trusted (files are accepted automatically)' : ''}`,
+        `- **Status** ${f.away ? 'away' : f.online ? 'online' : 'offline'}${f.online && statusText(f.status, f.statusMsg) ? ` · ${statusText(f.status, f.statusMsg)}` : ''} · ${STATE_LABEL[f.state] ?? f.state}${f.trusted ? ' · ★ trusted (files are accepted automatically)' : ''}`,
         `- **Address** ${f.lastIp ? `\`${f.lastIp}:${f.lastPort ?? '?'}\`` : 'unknown'}`,
         `- **Safety code** ${code ? `\`${code}\`` : 'not connected yet'}`,
         '',
@@ -265,7 +276,7 @@ export const builtinCommands: Command[] = [
     name: 'notifications',
     aliases: ['notify'],
     usage: '[on|off]',
-    description: 'Desktop notifications for incoming files while termdrop is in the background',
+    description: 'Desktop notifications while the app is in the background (all apps)',
     scope: 'global',
     run(ctx, args) {
       const arg = args[0]?.toLowerCase();

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { cleanName, sanitizeText } from '../core/sanitize.js';
+import { cleanName, sanitizeText } from 'termcore/app/sanitize';
 import { MAX_FILES } from './offer.js';
 
 /** A file picked for sending. */

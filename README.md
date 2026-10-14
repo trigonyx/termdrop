@@ -4,7 +4,7 @@ AirDrop for the terminal: send files to friends on your local network, end-to-en
 No server, no account, no cloud: friends on the same Wi-Fi show up automatically, and you drag a file into the window.
 
 ```
- termdrop  v1.0.0  Alice · NMBU-CRR4                       192.168.1.20:5054 · ● 2 friends online
+ termdrop  v2.0.0  Alice · NMBU-CRR4                       192.168.1.20:5054 · ● 2 friends online
 ──────────────────────────────────────────────────────────────────────────────────────────────────
             ████████╗███████╗██████╗ ███╗   ███╗██████╗ ██████╗  ██████╗ ██████╗
             ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
@@ -47,7 +47,8 @@ termdrop checks for a new version every time it starts. If there is one, the hea
 - in a terminal: `termdrop update`
 - or the install command again: `npm i -g https://github.com/trigonyx/termdrop/tarball/main`
 
-Your profile, friends and transfer history live in `~/.termdrop` and are kept across updates.
+Your profile and friends live in `~/.termhub` (shared with termchat and keyrace), your transfer history in
+`~/.termdrop`. Both are kept across updates.
 
 Updates never need `sudo`. If Node came from the nodejs.org installer, npm's global folder belongs to root, so
 `/update` and `termdrop update` install the new version into `~/.termdrop/app` instead, and the `termdrop`
@@ -56,9 +57,26 @@ command always starts the newest version it finds.
 Only the first install may need `sudo` on such a setup: if npm says `EACCES`, use `sudo npm i -g https://github.com/trigonyx/termdrop/tarball/main`,
 or install Node via a version manager such as [nvm](https://github.com/nvm-sh/nvm), [fnm](https://github.com/Schniz/fnm) or Homebrew.
 
+## One profile for termchat, keyrace and termdrop
+
+termdrop, [termchat](https://github.com/trigonyx/termchat) and [keyrace](https://github.com/trigonyx/keyrace)
+share one identity, one name and one friend list (in `~/.termhub`). Become friends in any of them, and you're
+friends in all of them – even while several are open at the same time, a change in one shows up in the
+others right away. Each app still has its own friends view (requests, Nearby, `a`, `/remove`, `/block` …), and
+they all work on the same list.
+
+**Coming from termdrop 1.x?** Your friends carry over automatically. The first time a 2.x app starts, it moves
+the identities, names and friend lists of all three apps into `~/.termhub` (your termchat ID becomes the
+shared one, if you have termchat; the old files are kept as a backup in `~/.termhub/legacy`). Friends who
+updated too recognize you under your new ID through a signed link, so nobody has to add anyone again – **ask
+your friends to update too.** Until they do, a 1.x termdrop sees an updated friend as a stranger.
+
+**termhub** – one app to see all your friends and where they're online, set your profile color and status,
+and start chats, races and transfers from one place – is coming soon.
+
 ## How it works
 
-- **First launch:** you pick a name. termdrop generates a key pair, and your ID comes from it (e.g. `NMBU-CRR4-…`). It never changes, even if you change your name or IP address, so your friends always recognize you.
+- **First launch:** you pick a name (unless termchat or keyrace already asked you). termdrop generates a key pair, and your ID comes from it (e.g. `NMBU-CRR4-…`). It never changes, even if you change your name or IP address, so your friends always recognize you.
 - **Finding people:** everyone running termdrop on the same network shows up under "Nearby" (UDP port 5055). Many school and office Wi-Fis drop broadcasts, so termdrop also asks every address of your subnet directly once at startup and whenever your IP changes (about 100 small packets per second, a few seconds for a typical network, at most the /16 around you), checks where your friends were last seen, and passes on the addresses it knows, so finding one person is enough to find the rest. Friends are recognized by their ID, never their IP: if a friend's IP changes, termdrop picks up the new one and reconnects on its own. Someone still not showing up (for example on a different subnet)? Press `a` and enter their IP.
 - **Friends:** whoever asks first shows up under "Requests" on the other side, and they decide with `enter` (accept) or `x` (decline). **Only friends can send you files** – offers from anyone else are ignored without an answer.
 - **Sending:** press `enter` on the banner (or on a friend), pick the files, tick one or more friends, `enter`. Every friend gets their own offer and their own line under "Transfers": `◷ waiting`, then a progress bar with speed and time left, then `✓` – or `✗ declined` / `cancelled` / `failed`. Someone who declines never holds up the others.
@@ -68,7 +86,8 @@ or install Node via a version manager such as [nvm](https://github.com/nvm-sh/nv
 - **Trusted friends** (`t` or `/trust`, marked `★`): their files are accepted without asking – you still get a notice. Offers that don't fit on your disk (with 100 MB to spare) are always declined automatically, and the sender sees why.
 - **Where files go:** `~/Downloads` (change it with `/folder <path>`). Nothing is ever overwritten: if `photo.jpg` exists, the new one becomes `photo (1).jpg`. Finished transfers stay in the panel; `tab` focuses it, `enter` opens a received file, `o` shows it in Finder.
 - **Firewalls:** termdrop needs a direct connection to each friend, and it's enough if one of the two computers accepts incoming connections. If it can't reach a friend, it says so. Then allow Node.js in the firewall: on Windows, also for *public* networks (school Wi-Fi usually counts as public); on macOS, click "Allow" when asked whether node may accept incoming connections.
-- termdrop, [keyrace](https://github.com/trigonyx/keyrace) and [termchat](https://github.com/trigonyx/termchat) use different ports and ignore each other, so all three can run at the same time.
+- **Profile color and status:** friends who picked a profile color show up in it (otherwise in a color from their ID), and their status (busy, do not disturb, a short message) appears next to their name. You set yours in termhub (coming soon); until then you can edit `~/.termhub/profile.json`. In **do not disturb**, offers – even from trusted friends – wait quietly under "Requests" instead of popping up or being accepted, and there are no desktop notifications.
+- termdrop, [keyrace](https://github.com/trigonyx/keyrace) and [termchat](https://github.com/trigonyx/termchat) use different ports, so all three can run at the same time – with the same friends.
 
 ## Security
 
@@ -124,7 +143,7 @@ or install Node via a version manager such as [nvm](https://github.com/nvm-sh/nv
 | `/help` | all commands |
 | `/send [paths…]` | send files (no paths: the file picker) |
 | `/me` | your name, ID, address and download folder |
-| `/name <name>` | change your display name |
+| `/name <name>` | change your display name (in all three apps) |
 | `/add <ip[:port]>` | add a friend by IP |
 | `/rename [name]` | your own nickname for the selected friend |
 | `/remove` | remove the selected friend |
@@ -133,7 +152,7 @@ or install Node via a version manager such as [nvm](https://github.com/nvm-sh/nv
 | `/trust` · `/untrust` | accept the selected friend's files automatically, or not |
 | `/folder [path]` | show or change where received files go |
 | `/history` | all past transfers |
-| `/notifications [on\|off]` | desktop notifications for incoming files |
+| `/notifications [on\|off]` | desktop notifications (for all three apps) |
 | `/update` | install the latest version |
 | `/quit` | quit |
 
@@ -147,7 +166,8 @@ or install Node via a version manager such as [nvm](https://github.com/nvm-sh/nv
 ```
 termdrop [files…]          # send these files (or hand them to the open termdrop)
          --to <name>       # preselect this friend (name, nickname or ID)
-         --home <dir>      # different data directory (default ~/.termdrop, or $TERMDROP_HOME)
+         --home <dir>      # different data directory: <dir> instead of ~/.termhub, <dir>/termdrop
+                           # instead of ~/.termdrop (or $TERMHUB_HOME)
          --port <port>     # TCP port (default 5054, falls back to a free one if taken)
          --no-discovery    # no automatic search
          --debug           # connection log at <home>/termdrop.log
@@ -164,26 +184,37 @@ termdrop --home /tmp/td-b --port 5065
 ```
 
 Then press `a` in one of them and enter `127.0.0.1:5065` (or `:5064`), and give each its own folder with
-`/folder /tmp/td-a-files` and `/folder /tmp/td-b-files`.
+`/folder /tmp/td-a-files` and `/folder /tmp/td-b-files`. termchat or keyrace with the same `--home` are the
+same person, with the same friends.
 
 ## Data
 
-Everything lives in `~/.termdrop/` (readable only by you):
+Readable only by you. Shared by termchat, keyrace and termdrop, in `~/.termhub/`:
 
 - `identity.json`: your secret key. **Don't share it.** If it's lost, you get a new ID.
-- `config.json`: name, port, download folder and notification setting
-- `contacts.json`: your friends (and requests), including whom you trust and their last known address
-- `peers.json`: names of former friends, so the history can still name them
+- `profile.json`: your name, profile color and status
+- `friends.json`: your friends (and requests), with their last known address, your nicknames and per-app
+  settings like whom you trust in termdrop
+- `peers.json`: names and addresses of people who aren't (or aren't anymore) your friends, so the history can
+  still name them
+- `settings.json`: accent color, animations (`nonstop`, `brief`, `off`), desktop notifications
+- `links.json`: links from your old IDs (one per app before 2.0) to the shared one, and the ones your friends sent
+- `legacy/`: backups of the old identities and friend lists from before 2.0
+
+termdrop's own, in `~/.termdrop/`:
+
+- `config.json`: port and download folder
 - `transfers.jsonl`: one line per finished transfer – time, direction, friend, file names and sizes, result, duration and where received files were saved
 - `termdrop.lock` and `termdrop.sock`: held by the running termdrop (one per data folder) – this is how `termdrop <files>` finds the open window. Both are removed on exit; a lock left behind by a crash is detected and replaced.
 
 ## Details and design decisions
 
-- **Ports:** TCP 5054 for connections, UDP 5055 for discovery (termchat uses 5050/5051, keyrace 5052/5053).
+- **Ports:** TCP 5054 for connections, UDP 5055 for discovery (termchat uses 5050/5051, keyrace 5052/5053, termhub will use 5056/5057).
+- **Shared core:** identity, encryption, discovery, friends and the shared data folder come from termcore (a sibling repo), which is bundled into `dist/` – nothing extra to install.
 - **One data connection per transfer.** Offers, answers and cancels go over the existing encrypted friend connection; the bytes of each transfer get a TCP connection of their own, authenticated with the same handshake. That way a big file never holds up pings, offers or other transfers, several recipients run in parallel without any scheduling code, and TCP does the flow control. It's opened by whichever side opened the friend connection – that direction demonstrably gets through both firewalls.
 - **On the data connection,** files go one after another in encrypted chunks of ~64 KB; after each file the sender sends its SHA-256, and at the end the receiver confirms (`done`) or says what went wrong (`failed`). Both sides wait whenever the other can't keep up: the sender for the socket to drain, the receiver pauses reading while its disk catches up. Nothing is ever held in memory as a whole.
 - **Speed:** limited by the network, not by termdrop. On localhost, the tests measure about 230–300 MB/s on an Apple Silicon Mac (256 MiB with encryption and hashing on both sides).
-- **Progress** reaches the screen at most 10 times a second; the speed is smoothed over ~2 s, and the time left is rounded (`<10s`, `~25s`, `~3 min`), so the numbers don't jump. While nothing runs, nothing redraws – apart from a light shimmer that runs across the logo every 6 seconds while the dashboard is in front (it rests while the terminal is in the background or a dialog is open).
+- **Progress** reaches the screen at most 10 times a second; the speed is smoothed over ~2 s, and the time left is rounded (`<10s`, `~25s`, `~3 min`), so the numbers don't jump. While nothing runs, nothing redraws – apart from a light glint across the logo: twice when the dashboard appears (`brief`, the default), every 6 seconds (`nonstop`) or never (`off`), as set in `~/.termhub/settings.json`. It rests while the terminal is in the background or a dialog is open.
 - **Limits:** 500 files per offer (folders aren't supported yet – zip them), 5 open offers per friend and 8 incoming transfers at once (more are declined as "busy"). A running transfer without a single byte for 30 s fails as stalled.
 - **When something breaks:** if the connection drops, the transfer fails on both sides and the partial file is deleted. Resuming comes in a later version.
 - **Multiple files, partly failed:** files that arrived complete and verified before a failure are kept, the rest is removed.
@@ -193,7 +224,7 @@ Everything lives in `~/.termdrop/` (readable only by you):
 ## Development
 
 ```sh
-npm install
+npm install                          # needs ../termcore next to this folder
 npm run dev -- --home /tmp/td-a      # run from source
 npm test                             # unit, integration (real instances on 127.0.0.1) and UI tests
 npm run typecheck

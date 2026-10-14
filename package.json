@@ -39,6 +39,7 @@
     "@types/node": "24.9.1",
     "@types/react": "19.2.2",
     "ink-testing-library": "4.0.0",
+    "termcore": "file:../termcore",
     "tsup": "8.5.0",
     "tsx": "4.20.6",
     "typescript": "5.9.3",

@@ -6,3 +6,4 @@ tsconfig.json export-ignore
 tsup.config.ts export-ignore
 .gitignore export-ignore
 .gitattributes export-ignore
+vitest.config.ts export-ignore

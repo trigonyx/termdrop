@@ -2,8 +2,8 @@ import type { Key } from 'ink';
 import { useEffect, useState } from 'react';
 import { registry } from '../../commands/builtin.js';
 import type { Command } from '../../commands/registry.js';
-import type { MenuItem } from '../components/CommandMenu.js';
-import type { EditorState } from '../editor.js';
+import type { MenuItem } from 'termcore/ui/components/CommandMenu';
+import type { EditorState } from 'termcore/ui/editor';
 
 interface Options {
   editor: EditorState;

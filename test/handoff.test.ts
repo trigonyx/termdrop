@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolvePaths, socketPath } from '../src/core/paths.js';
+import { socketPath } from 'termcore/app/paths';
+import { resolvePaths } from '../src/core/paths.js';
 import { acquireLock, handOff, Inbox, parseRequest, startHandoffServer, type Lock } from '../src/transfer/handoff.js';
 import { inspectPaths } from '../src/transfer/local.js';
 import { tmpDir } from './helpers.js';
@@ -16,6 +17,7 @@ const isLock = (r: unknown): r is Lock => typeof (r as Lock).release === 'functi
 describe('one instance per data folder', () => {
   it('the second one finds the lock taken; after release it is free again', async () => {
     const p = resolvePaths(tmpDir('lock'));
+    fs.mkdirSync(p.home, { recursive: true });
     const first = await acquireLock(p.lock, p.socket, { probe: async () => true });
     expect(isLock(first)).toBe(true);
     const second = await acquireLock(p.lock, p.socket, { probe: async () => true, isAlive: () => true });
@@ -33,6 +35,7 @@ describe('one instance per data folder', () => {
 
   it('a lock left by a crash (process gone) is stale and replaced', async () => {
     const p = resolvePaths(tmpDir('stale'));
+    fs.mkdirSync(p.home, { recursive: true });
     fs.writeFileSync(p.lock, JSON.stringify({ pid: 999_998, startedAt: Date.now(), socket: p.socket }));
     const lock = await acquireLock(p.lock, p.socket, { isAlive: () => false, probe: async () => false });
     expect(isLock(lock)).toBe(true);
@@ -43,6 +46,7 @@ describe('one instance per data folder', () => {
 
   it('a live pid that never answers is stale only after the start-up grace (pid reuse)', async () => {
     const p = resolvePaths(tmpDir('reuse'));
+    fs.mkdirSync(p.home, { recursive: true });
     const now = Date.now();
     fs.writeFileSync(p.lock, JSON.stringify({ pid: 999_997, startedAt: now - 2000, socket: p.socket }));
     const starting = await acquireLock(p.lock, p.socket, { isAlive: () => true, probe: async () => false, now: () => now });
@@ -53,21 +57,23 @@ describe('one instance per data folder', () => {
 
   it('a corrupt lock file is stale', async () => {
     const p = resolvePaths(tmpDir('corrupt'));
+    fs.mkdirSync(p.home, { recursive: true });
     fs.writeFileSync(p.lock, '{nope');
     expect(isLock(await acquireLock(p.lock, p.socket))).toBe(true);
   });
 
   it('long data folders get a socket in the temp dir (Unix socket paths are short)', () => {
     const long = `/tmp/${'x'.repeat(150)}`;
-    expect(socketPath(long, 'darwin').length).toBeLessThan(110);
-    expect(socketPath('/Users/me/.termdrop', 'darwin')).toBe('/Users/me/.termdrop/termdrop.sock');
-    expect(socketPath('C:\\Users\\me\\.termdrop', 'win32')).toMatch(/^\\\\\.\\pipe\\termdrop-[0-9a-f]{12}$/);
+    expect(socketPath(long, 'termdrop', 'darwin').length).toBeLessThan(110);
+    expect(socketPath('/Users/me/.termdrop', 'termdrop', 'darwin')).toBe('/Users/me/.termdrop/termdrop.sock');
+    expect(socketPath('C:\\Users\\me\\.termdrop', 'termdrop', 'win32')).toMatch(/^\\\\\.\\pipe\\termdrop-[0-9a-f]{12}$/);
   });
 });
 
 describe('handing files to the running instance', () => {
   it('paths and --to arrive in the running instance, the shell gets a summary', async () => {
     const p = resolvePaths(tmpDir('handoff'));
+    fs.mkdirSync(p.home, { recursive: true });
     const inbox = new Inbox();
     const server = await startHandoffServer(p.socket, (req) => {
       const { files, rejected } = inspectPaths(req.paths);
@@ -91,11 +97,13 @@ describe('handing files to the running instance', () => {
 
   it('nobody listening → null (then this one starts itself)', async () => {
     const p = resolvePaths(tmpDir('nobody'));
+    fs.mkdirSync(p.home, { recursive: true });
     expect(await handOff(p.socket, { v: 1, paths: [] }, 500)).toBeNull();
   });
 
   it('a socket file left by a crash is replaced', async () => {
     const p = resolvePaths(tmpDir('leftover'));
+    fs.mkdirSync(p.home, { recursive: true });
     fs.writeFileSync(p.socket, '');
     const server = await startHandoffServer(p.socket, () => ({ ok: true, added: 0, rejected: [] }));
     cleanups.push(() => server.close());

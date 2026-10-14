@@ -1,17 +1,15 @@
-import pkg from '../../package.json';
+import { installCmd, installSpec, repoConfigured } from 'termcore/app/version';
+import { APP } from '../app.js';
 
-export const VERSION: string = pkg.version;
+export const VERSION: string = APP.version;
 
 /** "owner/repo", taken from package.json → repository (the single place that names the repo). */
-export const REPO: string = /github\.com[/:]([^/]+\/[^/.]+)/.exec(pkg.repository.url)?.[1] ?? 'OWNER/termdrop';
+export const REPO: string = APP.repo;
 
 /** False until package.json names the real GitHub repo – no update checks or installs before that. */
-export const REPO_CONFIGURED = !REPO.startsWith('OWNER/');
+export const REPO_CONFIGURED = repoConfigured(APP);
 
-/**
- * What npm installs: GitHub's tarball of main (contains the committed dist/, needs no git).
- * Not `github:owner/repo` – npm 11 leaves a dangling symlink for global installs from git.
- */
-export const INSTALL_SPEC = `https://github.com/${REPO}/tarball/main`;
+/** What npm installs: GitHub's tarball of main (see termcore/app/version). */
+export const INSTALL_SPEC = installSpec(APP);
 
-export const INSTALL_CMD = `npm i -g ${INSTALL_SPEC}`;
+export const INSTALL_CMD = installCmd(APP);

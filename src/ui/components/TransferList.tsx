@@ -3,7 +3,7 @@ import type { AppStore } from '../../core/store.js';
 import type { HistoryEntry } from '../../transfer/history.js';
 import { secondsLeft, type Transfer } from '../../transfer/session.js';
 import { filesLabel, formatBytes, formatEta, formatSpeed } from '../../transfer/units.js';
-import { icons, theme } from '../theme.js';
+import { icons, theme } from 'termcore/ui/theme';
 
 /** One row of the panel: a transfer of this session that's still open, or a finished one. */
 export type TransferItem = { kind: 'live'; t: Transfer } | { kind: 'done'; e: HistoryEntry };

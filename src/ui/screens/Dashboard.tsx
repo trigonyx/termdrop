@@ -1,22 +1,23 @@
 import fs from 'node:fs';
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
-import type { DiscoveredPeer } from '../../core/discovery.js';
+import type { DiscoveredPeer } from 'termcore/net/discovery';
 import type { AppStore, FriendView, RequestEntry } from '../../core/store.js';
 import { resolvePastedPaths } from '../../transfer/paste.js';
 import { filesLabel, formatBytes, plural } from '../../transfer/units.js';
 import type { Actions } from '../actions.js';
 import { Banner, bannerCompact, bannerHeight } from '../components/Banner.js';
-import { CommandMenu, menuHeight } from '../components/CommandMenu.js';
-import { Dialog, dialogHeight, type DialogSpec } from '../components/Dialog.js';
-import { Footer } from '../components/Footer.js';
-import { InputBox, inputBoxHeight } from '../components/InputBox.js';
+import { CommandMenu, menuHeight } from 'termcore/ui/components/CommandMenu';
+import { Dialog, dialogHeight, type DialogSpec } from 'termcore/ui/components/Dialog';
+import { Footer } from 'termcore/ui/components/Footer';
+import { InputBox, inputBoxHeight } from 'termcore/ui/components/InputBox';
 import { OfferDetail, offerDetailHeight } from '../components/OfferDetail.js';
 import { itemKey, TransferList, transferItems, transferPanelHeight, type TransferItem } from '../components/TransferList.js';
-import { cleanPaste, edit, emptyEditor, type EditorState } from '../editor.js';
-import { usePaste, useWheel } from '../mouse.js';
+import { cleanPaste, edit, emptyEditor, type EditorState } from 'termcore/ui/editor';
+import { usePaste, useWheel } from 'termcore/ui/mouse';
 import { openPath, revealPath } from '../open.js';
-import { icons, theme } from '../theme.js';
+import { icons, theme, personHex } from 'termcore/ui/theme';
+import { presenceDot, statusText } from 'termcore/ui/presence';
 import { useCommandInput } from './useCommandInput.js';
 
 type Entry =
@@ -66,11 +67,15 @@ function friendStatus(f: FriendView): { icon: string; color: string; text: strin
       return { icon: icons.error, color: theme.faint, text: 'declined your request' };
     case 'blocked':
       return { icon: icons.error, color: theme.error, text: 'blocked' };
-    default:
-      if (f.online && f.busy) return { icon: icons.online, color: theme.accent, text: 'transferring' };
-      if (f.away) return { icon: icons.away, color: theme.warning, text: 'away' };
-      if (f.online) return { icon: icons.online, color: theme.success, text: 'online' };
-      return { icon: icons.offline, color: theme.faint, text: 'offline' };
+    default: {
+      if (!f.online) return { icon: icons.offline, color: theme.faint, text: 'offline' };
+      // their status (busy, do not disturb, a message) comes with their presence
+      const status = statusText(f.status, f.statusMsg);
+      const dot = presenceDot(f);
+      if (f.busy) return { icon: icons.online, color: theme.accent, text: ['transferring', status].filter(Boolean).join(' · ') };
+      if (f.status !== 'available') return { ...dot, text: status };
+      return { ...dot, text: [f.away ? 'away' : 'online', status].filter(Boolean).join(' · ') };
+    }
   }
 }
 
@@ -97,7 +102,8 @@ export function Dashboard(props: Props) {
   const newestKey = newestOffer?.kind === 'offer' ? `o:${newestOffer.offer.xid}` : null;
   const seenOffer = useRef<string | null>(null);
   useEffect(() => {
-    if (newestKey && newestKey !== seenOffer.current && !dialog) {
+    // do not disturb: the offer waits under Requests without grabbing the selection
+    if (newestKey && newestKey !== seenOffer.current && !dialog && !store.dnd) {
       onSelect(newestKey);
       onFocus('list');
     }
@@ -344,7 +350,13 @@ export function Dashboard(props: Props) {
   const empty = data.friends.length === 0 && data.requests.length === 0;
   return (
     <Box flexDirection="column" width={width} height={height}>
-      <Banner width={width} compact={compact} selected={!tFocus && current?.type === 'banner'} animate={store.isFocused && idle} />
+      <Banner
+          width={width}
+          compact={compact}
+          selected={!tFocus && current?.type === 'banner'}
+          animate={store.isFocused && idle}
+          mode={store.settings.animations}
+        />
       <Box flexDirection={side ? 'row' : 'column'} height={mainHeight} width={width} alignItems="flex-start" overflow="hidden">
         <Box flexDirection="column" height={listHeight} width={listWidth} paddingX={1} overflow="hidden" flexShrink={0}>
           {visible.map((l, i) => {
@@ -458,7 +470,7 @@ function Row({ entry, selected, width }: { entry: Entry; selected: boolean; widt
       <Pointer selected={selected} />
       {dot(st.icon, st.color)}
       <Box width={nameWidth} flexShrink={0}>
-        <Text bold={selected} color={selected ? theme.accent : undefined} wrap="truncate-end">
+        <Text bold={selected} color={selected ? theme.accent : f.state === 'accepted' ? personHex(f.id, f.color) : undefined} wrap="truncate-end">
           {f.display}
         </Text>
         {f.trusted && f.state === 'accepted' ? <Text color={theme.warning}> {icons.star}</Text> : null}

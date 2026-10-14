@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
-import type { FrameSocket } from '../core/framing.js';
-import { MAX_FRAME } from '../core/framing.js';
-import type { HandshakeResult } from '../core/handshake.js';
+import type { FrameSocket } from 'termcore/net/framing';
+import { MAX_FRAME } from 'termcore/net/framing';
+import type { HandshakeResult } from 'termcore/net/handshake';
 import { parseLinkMsg, type LinkMsg } from '../core/protocol.js';
 
 const TAG_LEN = 16;
