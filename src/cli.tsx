@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { render } from 'ink';
 import { spawn } from 'node:child_process';
@@ -165,6 +166,7 @@ async function main(): Promise<void> {
     if (restored) return;
     restored = true;
     lock.release();
+    if (process.platform !== 'win32') fs.rmSync(paths.socket, { force: true });
     process.stdout.write(MOUSE_OFF + SHOW_CURSOR + ALT_SCREEN_OFF);
   };
   // alternate scroll + focus reports + bracketed paste (drag & drop)

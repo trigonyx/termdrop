@@ -255,7 +255,7 @@ export const builtinCommands: Command[] = [
         const where = e.saved?.length ? ` → \`${showPath(tildify(path.dirname(e.saved[0]!)))}\`` : '';
         lines.push(
           `- ${arrow} **${e.peerName}** ${showPath(filesLabel(e.files))} · ${formatBytes(e.total)} · ${RESULT_TEXT[e.result]}` +
-            `${e.result === 'done' && e.ms ? ` in ${duration(e.ms)}` : e.reason ? ` (${e.reason})` : ''}${where} _${shortTime(e.ts)}_`,
+            `${e.result === 'done' && e.ms >= 1000 ? ` in ${duration(e.ms)}` : e.reason ? ` (${e.reason})` : ''}${where} _${shortTime(e.ts)}_`,
         );
       }
       ctx.ui.print(lines.join('\n'));

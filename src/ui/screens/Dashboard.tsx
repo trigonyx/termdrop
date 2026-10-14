@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { Box, Text, useInput } from 'ink';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DiscoveredPeer } from '../../core/discovery.js';
 import type { AppStore, FriendView, RequestEntry } from '../../core/store.js';
 import { resolvePastedPaths } from '../../transfer/paste.js';
@@ -91,6 +91,18 @@ export function Dashboard(props: Props) {
   if (selected === -1) selected = sections.requests.length ? 1 : 0;
   const current = entries[selected];
   const currentOffer = current?.type === 'request' && current.request.kind === 'offer' ? current.request.offer : null;
+
+  // a new incoming offer gets selected, so enter accepts it (offers are what people react to right away)
+  const newestOffer = data.requests.find((r) => r.kind === 'offer');
+  const newestKey = newestOffer?.kind === 'offer' ? `o:${newestOffer.offer.xid}` : null;
+  const seenOffer = useRef<string | null>(null);
+  useEffect(() => {
+    if (newestKey && newestKey !== seenOffer.current && !dialog) {
+      onSelect(newestKey);
+      onFocus('list');
+    }
+    seenOffer.current = newestKey;
+  }, [newestKey]);
 
   const items = transferItems(store);
   const tFocus = focus === 'transfers' && items.length > 0;

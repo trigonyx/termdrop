@@ -124,9 +124,9 @@ export class TransferManager {
     return this.list().filter((t) => !isFinal(t.status) && t.status !== 'offered');
   }
 
-  /** A running or about-to-run transfer with this friend (they shouldn't be removed silently). */
+  /** Files are moving between us and this friend right now. */
   busyWith(id: string): boolean {
-    return this.list().some((t) => t.peerId === id && !isFinal(t.status));
+    return this.list().some((t) => t.peerId === id && (t.status === 'active' || t.status === 'connecting'));
   }
 
   // ───────────── Sending ─────────────

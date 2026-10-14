@@ -72,8 +72,7 @@ const Arrow = ({ dir }: { dir: 'in' | 'out' }) => <Cell color={dir === 'out' ? t
 const Pointer = ({ on }: { on: boolean }) => <Cell color={theme.accent}>{on ? icons.pointer : ' '}</Cell>;
 
 /** A running or waiting transfer. */
-function LiveRow({ t, width, selected }: { t: Transfer; width: number; selected: boolean }) {
-  const nameW = Math.min(12, Math.max(6, Math.floor(width * 0.28)));
+function LiveRow({ t, width, selected, nameW }: { t: Transfer; width: number; selected: boolean; nameW: number }) {
   const head = (
     <Box width={width}>
       <Pointer on={selected} />
@@ -84,7 +83,9 @@ function LiveRow({ t, width, selected }: { t: Transfer; width: number; selected:
         </Text>
       </Box>
       <Box flexGrow={1} flexShrink={1} minWidth={0} marginLeft={1}>
-        <Text wrap="truncate-middle">{filesLabel(t.files)}</Text>
+        <Text wrap="truncate-middle">
+          {t.status === 'active' && t.files.length > 1 ? `${t.files[t.fileIndex]?.name ?? ''} · ${t.fileIndex + 1}/${t.files.length}` : filesLabel(t.files)}
+        </Text>
       </Box>
       {t.status === 'waiting' ? (
         <Box flexShrink={0} marginLeft={1}>
@@ -121,9 +122,8 @@ function LiveRow({ t, width, selected }: { t: Transfer; width: number; selected:
   );
 }
 
-function DoneRow({ e, width, selected }: { e: HistoryEntry; width: number; selected: boolean }) {
+function DoneRow({ e, width, selected, nameW }: { e: HistoryEntry; width: number; selected: boolean; nameW: number }) {
   const ok = e.result === 'done';
-  const nameW = Math.min(12, Math.max(6, Math.floor(width * 0.28)));
   const right = ok ? formatBytes(e.total) : RESULT_LABEL[e.result];
   return (
     <Box width={width}>
@@ -173,11 +173,13 @@ export function TransferList({
   const shownDone = compact ? done.slice(0, 2) : done;
   const totals = store.totals();
   const sel = (key: string) => focused && selected === key;
+  // names as wide as the longest one needs (up to 10), so file names get the rest
+  const nameW = Math.max(4, Math.min(10, ...items.map((i) => (i.kind === 'live' ? i.t.peerName : i.e.peerName).length)));
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={focused ? theme.accent : theme.border} paddingX={1} width={width} flexShrink={0}>
       <Title>{live.length ? `Transfers · ${live.length}` : 'Transfers'}</Title>
       {live.length ? (
-        live.map((i) => <LiveRow key={i.t.xid} t={i.t} width={inner} selected={sel(i.t.xid)} />)
+        live.map((i) => <LiveRow key={i.t.xid} t={i.t} width={inner} selected={sel(i.t.xid)} nameW={nameW} />)
       ) : (
         <Text color={theme.faint} wrap="truncate-end">
           Nothing running right now.
@@ -188,7 +190,7 @@ export function TransferList({
           <Text> </Text>
           <Title>Recent</Title>
           {shownDone.map((i) => (
-            <DoneRow key={i.e.xid} e={i.e} width={inner} selected={sel(i.e.xid)} />
+            <DoneRow key={i.e.xid} e={i.e} width={inner} selected={sel(i.e.xid)} nameW={nameW} />
           ))}
         </>
       ) : null}
