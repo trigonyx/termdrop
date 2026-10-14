@@ -1,5 +1,5 @@
 import { XID_RE } from './handshake.js';
-import { cleanName, sanitizeText } from './sanitize.js';
+import { cleanName } from './sanitize.js';
 import { parseOfferFiles, type OfferFile } from '../transfer/offer.js';
 
 /** How one side sees the relationship. `outgoing` = "I want to be friends with you". */
@@ -119,9 +119,6 @@ export function parseLinkMsg(buf: Buffer): LinkMsg | null {
 export function encodeWire(msg: Wire): Buffer {
   return Buffer.from(JSON.stringify(msg), 'utf8');
 }
-
-/** For log lines and the like: never let a peer's text through unfiltered. */
-export const cleanReason = (text: string) => sanitizeText(text).replace(/\s+/g, ' ').trim().slice(0, 200);
 
 const REL_STATES: RelState[] = ['accepted', 'outgoing', 'none'];
 

@@ -55,11 +55,3 @@ export function duration(ms: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
-
-/** Countdown clock: 59.4 s → "0:59" (rounded up, so it reads 0:00 only at the very end) */
-export function clockDown(ms: number): string {
-  const s = Math.ceil(Math.max(0, ms) / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-export const pct = (x: number) => `${Math.round(x * 100)}%`;
