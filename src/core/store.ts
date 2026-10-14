@@ -8,7 +8,7 @@ import type { ContactState } from 'termcore/friends/state';
 import type { DiscoveredPeer, DiscoveryOptions } from 'termcore/net/discovery';
 import type { Settings } from 'termcore/store/files';
 import { Hub } from 'termcore/store/hub';
-import { setAccent } from 'termcore/ui/theme';
+import { setAccent, setPersonColors } from 'termcore/ui/theme';
 import { APP } from '../app.js';
 import { HistoryBook, type HistoryEntry, type Totals } from '../transfer/history.js';
 import { DataLink } from '../transfer/link.js';
@@ -136,6 +136,8 @@ export class AppStore {
       },
     });
     this.applySettings(this.hub.settings.get());
+    // names in friends' profile colors wherever the UI colors people
+    setPersonColors((id) => this.contacts.get(id)?.color);
     this.transfers = new TransferManager({
       send: (id, msg) => this.net.send(id, msg),
       isOnline: (id) => this.net.isOnline(id),
