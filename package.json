@@ -1,0 +1,47 @@
+{
+  "name": "termdrop",
+  "version": "0.0.0",
+  "description": "End-to-end encrypted file sharing with friends on your local network, right in the terminal.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trigonyx/termdrop.git"
+  },
+  "homepage": "https://github.com/trigonyx/termdrop#readme",
+  "bugs": {
+    "url": "https://github.com/trigonyx/termdrop/issues"
+  },
+  "type": "module",
+  "bin": {
+    "termdrop": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.tsx",
+    "build": "tsup",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "release": "node scripts/release.mjs"
+  },
+  "dependencies": {
+    "chalk": "5.6.2",
+    "ink": "6.8.0",
+    "react": "19.2.0",
+    "string-width": "8.1.0",
+    "wrap-ansi": "9.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.1",
+    "@types/react": "19.2.2",
+    "ink-testing-library": "4.0.0",
+    "tsup": "8.5.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

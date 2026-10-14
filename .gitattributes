@@ -1,0 +1,8 @@
+# Keep GitHub tarballs (what `npm i -g` installs) lean: dist/ is all that runs
+src export-ignore
+test export-ignore
+scripts export-ignore
+tsconfig.json export-ignore
+tsup.config.ts export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
