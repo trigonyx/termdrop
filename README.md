@@ -71,8 +71,15 @@ shared one, if you have termchat; the old files are kept as a backup in `~/.term
 updated too recognize you under your new ID through a signed link, so nobody has to add anyone again – **ask
 your friends to update too.** Until they do, a 1.x termdrop sees an updated friend as a stranger.
 
-**termhub** – one app to see all your friends and where they're online, set your profile color and status,
-and start chats, races and transfers from one place – is coming soon.
+**termhub** – the hub of the suite: your profile (name, color, status), all your friends and in which app
+they're online right now, the settings all apps share, an encrypted backup of your identity – and it installs,
+opens and updates termchat, keyrace and termdrop for you:
+
+```sh
+npm i -g https://github.com/trigonyx/termhub/tarball/main
+```
+
+See [termhub](https://github.com/trigonyx/termhub).
 
 ## How it works
 
@@ -86,7 +93,7 @@ and start chats, races and transfers from one place – is coming soon.
 - **Trusted friends** (`t` or `/trust`, marked `★`): their files are accepted without asking – you still get a notice. Offers that don't fit on your disk (with 100 MB to spare) are always declined automatically, and the sender sees why.
 - **Where files go:** `~/Downloads` (change it with `/folder <path>`). Nothing is ever overwritten: if `photo.jpg` exists, the new one becomes `photo (1).jpg`. Finished transfers stay in the panel; `tab` focuses it, `enter` opens a received file, `o` shows it in Finder.
 - **Firewalls:** termdrop needs a direct connection to each friend, and it's enough if one of the two computers accepts incoming connections. If it can't reach a friend, it says so. Then allow Node.js in the firewall: on Windows, also for *public* networks (school Wi-Fi usually counts as public); on macOS, click "Allow" when asked whether node may accept incoming connections.
-- **Profile color and status:** friends who picked a profile color show up in it (otherwise in a color from their ID), and their status (busy, do not disturb, a short message) appears next to their name. You set yours in termhub (coming soon); until then you can edit `~/.termhub/profile.json`. In **do not disturb**, offers – even from trusted friends – wait quietly under "Requests" instead of popping up or being accepted, and there are no desktop notifications.
+- **Profile color and status:** friends who picked a profile color show up in it (otherwise in a color from their ID), and their status (busy, do not disturb, a short message) appears next to their name. You set yours in [termhub](https://github.com/trigonyx/termhub) (Profile tab). In **do not disturb**, offers – even from trusted friends – wait quietly under "Requests" instead of popping up or being accepted, and there are no desktop notifications.
 - termdrop, [keyrace](https://github.com/trigonyx/keyrace) and [termchat](https://github.com/trigonyx/termchat) use different ports, so all three can run at the same time – with the same friends.
 
 ## Security
@@ -189,7 +196,7 @@ same person, with the same friends.
 
 ## Data
 
-Readable only by you. Shared by termchat, keyrace and termdrop, in `~/.termhub/`:
+Readable only by you. Shared by termchat, keyrace, termdrop and termhub, in `~/.termhub/`:
 
 - `identity.json`: your secret key. **Don't share it.** If it's lost, you get a new ID.
 - `profile.json`: your name, profile color and status
@@ -209,7 +216,7 @@ termdrop's own, in `~/.termdrop/`:
 
 ## Details and design decisions
 
-- **Ports:** TCP 5054 for connections, UDP 5055 for discovery (termchat uses 5050/5051, keyrace 5052/5053, termhub will use 5056/5057).
+- **Ports:** TCP 5054 for connections, UDP 5055 for discovery (termchat uses 5050/5051, keyrace 5052/5053, termhub 5056/5057).
 - **Shared core:** identity, encryption, discovery, friends and the shared data folder come from termcore (a sibling repo), which is bundled into `dist/` – nothing extra to install.
 - **One data connection per transfer.** Offers, answers and cancels go over the existing encrypted friend connection; the bytes of each transfer get a TCP connection of their own, authenticated with the same handshake. That way a big file never holds up pings, offers or other transfers, several recipients run in parallel without any scheduling code, and TCP does the flow control. It's opened by whichever side opened the friend connection – that direction demonstrably gets through both firewalls.
 - **On the data connection,** files go one after another in encrypted chunks of ~64 KB; after each file the sender sends its SHA-256, and at the end the receiver confirms (`done`) or says what went wrong (`failed`). Both sides wait whenever the other can't keep up: the sender for the socket to drain, the receiver pauses reading while its disk catches up. Nothing is ever held in memory as a whole.
