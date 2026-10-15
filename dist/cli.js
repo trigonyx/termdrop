@@ -104,6 +104,32 @@ var installSpec = (app) => `https://github.com/${app.repo}/tarball/main`;
 var installCmd = (app) => `npm i -g ${installSpec(app)}`;
 
 // ../termcore/src/app/update.ts
+function npmCommand(env = process.env) {
+  if (env.TERMHUB_NPM) return { cmd: env.TERMHUB_NPM, shell: false };
+  const win = process.platform === "win32";
+  return { cmd: win ? "npm.cmd" : "npm", shell: win };
+}
+function runNpm(args, opts = {}) {
+  return new Promise((resolve) => {
+    const { cmd, shell } = npmCommand();
+    let output = "";
+    const take = (d) => {
+      const s = String(d);
+      output += s;
+      opts.onOutput?.(s);
+    };
+    try {
+      const p = spawn(cmd, args, { stdio: opts.inherit ? "inherit" : ["ignore", "pipe", "pipe"], shell });
+      p.stdout?.on("data", take);
+      p.stderr?.on("data", take);
+      p.on("error", (err) => resolve({ ok: false, output: `${output}
+${err.message}` }));
+      p.on("close", (code) => resolve({ ok: code === 0, output }));
+    } catch (err) {
+      resolve({ ok: false, output: err.message });
+    }
+  });
+}
 var VERSION_RE = /^\d+\.\d+\.\d+$/;
 var PERMISSION_RE = /EACCES|EPERM|permission denied/i;
 function compareVersions(a, b) {
@@ -199,48 +225,58 @@ Update it there with \`git pull && npm install\`, or install the release with \`
       return "local";
     }
   }
-  function npmInstall(spec, inherit, target) {
+  function npmInstall(spec, inherit, target, onOutput) {
     const dir = appDir2();
     const args = target === "global" ? ["install", "-g", "--prefer-online", spec] : (
       // own cache: after `sudo npm ...`, ~/.npm often contains root-owned files
       ["install", "--prefix", dir, "--cache", path4.join(dir, ".npm-cache"), "--prefer-online", "--no-audit", "--no-fund", spec]
     );
-    return new Promise((resolve) => {
-      const win = process.platform === "win32";
-      let output = "";
-      try {
-        if (target === "local") fs.mkdirSync(dir, { recursive: true });
-        const p = spawn(win ? "npm.cmd" : "npm", args, {
-          stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"],
-          shell: win
-        });
-        p.stdout?.on("data", (d) => output += d);
-        p.stderr?.on("data", (d) => output += d);
-        p.on("error", (err) => resolve({ ok: false, output: `${output}
-${err.message}` }));
-        p.on("close", (code) => resolve({ ok: code === 0, output }));
-      } catch (err) {
-        resolve({ ok: false, output: err.message });
-      }
-    });
+    try {
+      if (target === "local") fs.mkdirSync(dir, { recursive: true });
+    } catch (err) {
+      return Promise.resolve({ ok: false, output: err.message });
+    }
+    return runNpm(args, { inherit, onOutput });
   }
-  async function runInstall2({ inherit, version }) {
+  async function runInstall2({
+    inherit,
+    version,
+    target: forced,
+    onOutput
+  }) {
     if (!REPO_CONFIGURED2 && !env("INSTALL_SPEC")) return { ok: false, output: "The GitHub repo is not set in package.json yet." };
     const attempt = async (target2) => {
       if (version && !env("INSTALL_SPEC")) {
-        const res2 = await npmInstall(specFor(version), inherit, target2);
+        const res2 = await npmInstall(specFor(version), inherit, target2, onOutput);
         if (res2.ok || PERMISSION_RE.test(res2.output)) return res2;
       }
-      return npmInstall(specFor(), inherit, target2);
+      return npmInstall(specFor(), inherit, target2, onOutput);
     };
-    const target = installTarget2();
+    const target = forced ?? installTarget2();
     const res = await attempt(target);
-    if (!res.ok && target === "global" && !isRoot() && PERMISSION_RE.test(res.output)) return attempt("local");
+    if (!res.ok && target === "global" && !isRoot() && PERMISSION_RE.test(res.output)) {
+      onOutput?.(`
+No permission for npm's global folder \u2013 installing into ${appDir2()} instead.
+`);
+      return attempt("local");
+    }
     return res;
+  }
+  async function runUninstall({ target, inherit = false, onOutput }) {
+    if (target === "global") return runNpm(["rm", "-g", name], { inherit, onOutput });
+    try {
+      fs.rmSync(appDir2(), { recursive: true, force: true });
+      const msg = `Removed ${appDir2()}
+`;
+      onOutput?.(msg);
+      return { ok: true, output: msg };
+    } catch (err) {
+      return { ok: false, output: err.message };
+    }
   }
   function installedVersion2(script = process.argv[1] ?? "") {
     return new Promise((resolve) => {
-      execFile(process.execPath, [script, "--version"], { timeout: 15e3 }, (err, stdout) => {
+      execFile(process.execPath, [script, "--version"], { timeout: 15e3, env: { ...process.env, [`${P}_NO_UPDATE_CHECK`]: "1" } }, (err, stdout) => {
         const version = new RegExp(`${name} (\\d+\\.\\d+\\.\\d+)`).exec(String(stdout))?.[1];
         resolve(err || !version ? null : version);
       });
@@ -269,6 +305,7 @@ ${err.message}` }));
     newerLocalInstall: newerLocalInstall2,
     installTarget: installTarget2,
     runInstall: runInstall2,
+    runUninstall,
     installedVersion: installedVersion2,
     staleInstallHint: staleInstallHint2,
     installHint: installHint2
@@ -278,7 +315,7 @@ ${err.message}` }));
 // package.json
 var package_default = {
   name: "termdrop",
-  version: "2.0.0",
+  version: "2.1.0",
   description: "End-to-end encrypted file sharing with friends on your local network, right in the terminal.",
   repository: {
     type: "git",
@@ -823,7 +860,7 @@ function filesLabel(files) {
 }
 
 // src/ui/App.tsx
-import { Box as Box14, Text as Text15, useApp, useInput as useInput8 } from "ink";
+import { Box as Box15, Text as Text16, useApp, useInput as useInput8 } from "ink";
 import { useCallback, useEffect as useEffect7, useMemo, useRef as useRef4, useState as useState9 } from "react";
 
 // src/commands/builtin.ts
@@ -885,6 +922,8 @@ function mergeFriends(a, b, id = a.id) {
   if (Object.keys(ports).length) out.ports = ports;
   const lastSeen = max(a.lastSeen, b.lastSeen);
   if (lastSeen !== void 0) out.lastSeen = lastSeen;
+  if (recent.status) out.status = recent.status;
+  if (recent.statusMsg) out.statusMsg = recent.statusMsg;
   if (Object.keys(apps).length) out.apps = apps;
   return out;
 }
@@ -901,7 +940,7 @@ function mergePeers(a, b, id = a.id) {
 }
 
 // ../termcore/src/friends/book.ts
-var SHARED = /* @__PURE__ */ new Set(["publicKey", "name", "alias", "state", "color", "lastIp", "lastSeen", "lastActivity", "createdAt"]);
+var SHARED = /* @__PURE__ */ new Set(["publicKey", "name", "alias", "state", "color", "lastIp", "lastSeen", "lastActivity", "createdAt", "status", "statusMsg"]);
 function displayName(c2) {
   return c2.alias || c2.name;
 }
@@ -1941,7 +1980,8 @@ var Dialer = class {
   }
   target(id) {
     const p = this.d.discovery()?.find(id);
-    if (p) return { ip: p.ip, port: p.port, discovered: true };
+    const port = p && (this.d.portOf ? this.d.portOf(p) : p.port);
+    if (p && port) return { ip: p.ip, port, discovered: true };
     const last = this.d.lastAddress(id);
     return last ? { ...last, discovered: false } : null;
   }
@@ -2997,6 +3037,8 @@ function parseFriend(raw) {
     lastSeen: num(o.lastSeen),
     lastActivity: num(o.lastActivity) ?? now,
     createdAt: num(o.createdAt) ?? now,
+    status: isStatus(o.status) && o.status !== "available" ? o.status : void 0,
+    statusMsg: cleanStatusMsg(o.statusMsg),
     apps: parseApps2(o.apps)
   });
 }
@@ -3488,11 +3530,12 @@ var Hub = class {
   static profileName(paths) {
     return parseProfile(readJson(paths.profile, null))?.name ?? null;
   }
-  /** Creates identity (if there's none yet) and profile on first launch. */
-  static createProfile(paths, name) {
+  /** Creates identity (if there's none yet) and profile on first launch (termhub also asks for a color). */
+  static createProfile(paths, name, color) {
     const identity = loadOrCreateIdentity(paths.identity);
     const prev = parseProfile(readJson(paths.profile, null));
-    writeJsonAtomic(paths.profile, { ...prev ?? { v: 1, status: "available" }, name: cleanName(name) });
+    const hex = normalizeColor(color);
+    writeJsonAtomic(paths.profile, { ...prev ?? { v: 1, status: "available" }, name: cleanName(name), ...hex ? { color: hex } : {} });
     return identity;
   }
   /** Follows file changes by the other apps. */
@@ -3572,7 +3615,7 @@ function applyLinks(hub, appHome, rekey) {
   return applied;
 }
 function migrationNotice(friends) {
-  return `Your profile and ${friends === 1 ? "1 friend" : `${friends} friends`} moved to ~/.termhub \u2013 shared by termchat, keyrace and termdrop`;
+  return `Your profile and ${friends === 1 ? "1 friend" : `${friends} friends`} moved to ~/.termhub \u2013 shared by termchat, keyrace, termdrop and termhub`;
 }
 
 // ../termcore/src/friends/wire.ts
@@ -3669,7 +3712,8 @@ var FriendNet = class {
       },
       alsoWants: (id) => opts.hooks.alsoWants?.(id) ?? false,
       log: (l) => this.log(l),
-      unreachable: (id, info) => this.event({ kind: "unreachable", id, who: this.peerName(id), ...info })
+      unreachable: (id, info) => this.event({ kind: "unreachable", id, who: this.peerName(id), ...info }),
+      portOf: (p) => this.ownPort(p)
     });
     this.network.on("session", (s) => this.onSession(s));
     this.network.on("purpose", (c2) => opts.hooks.purpose ? opts.hooks.purpose(c2) : c2.fs.destroy());
@@ -3819,6 +3863,17 @@ var FriendNet = class {
     if (c2) return displayName(c2);
     return this.peerBook.get(id)?.name ?? "Unknown";
   }
+  /**
+   * Our app's TCP port on a discovered peer's computer: the one it announced if it is our app,
+   * else from the list of apps running there (`apps`). termhub sees people through every app.
+   */
+  ownPort(p) {
+    return p.app === this.app.name ? p.port : p.apps?.[this.app.name];
+  }
+  /** The discovered peer that is (or was, see links) `id`. */
+  discovered(id) {
+    return this.discoveryRef?.find(id);
+  }
   /** People on the network running this app who aren't friends (an old id they announce counts). */
   nearby() {
     return [...this.discoveryRef?.peers.values() ?? []].filter((p) => !this.contacts.get(p.id) && !(p.was ?? []).some((w) => this.contacts.get(w))).sort((a, b) => a.name.localeCompare(b.name));
@@ -3855,7 +3910,9 @@ var FriendNet = class {
       return result;
     }
     if (!p) throw new Error("They are no longer nearby");
-    this.contacts.upsert(id, { publicKey: "", name: p.name, state: "outgoing", lastIp: p.ip, lastPort: p.port });
+    const port = this.ownPort(p);
+    this.contacts.upsert(id, { publicKey: "", name: p.name, state: "outgoing", lastIp: p.ip, ...port ? { lastPort: port } : {} });
+    this.contacts.setPorts(id, { ...p.apps, [p.app]: p.port });
     this.connect(id);
     this.changed();
     return "sent";
@@ -3978,12 +4035,15 @@ var FriendNet = class {
     if (!d) return;
     const seen = [];
     for (const p of d.peers.values()) {
+      const port = this.ownPort(p);
       for (const id of [p.id, ...p.was ?? []]) {
         const c2 = this.contacts.get(id);
-        if (c2 && (c2.lastIp !== p.ip || c2.lastPort !== p.port)) this.contacts.upsert(id, { lastIp: p.ip, lastPort: p.port });
-        if (c2 && p.apps) this.contacts.setPorts(id, p.apps);
+        if (c2 && (c2.lastIp !== p.ip || port && c2.lastPort !== port)) {
+          this.contacts.upsert(id, { lastIp: p.ip, ...port ? { lastPort: port } : {} });
+        }
+        if (c2 && (p.apps || p.app !== this.app.name)) this.contacts.setPorts(id, { ...p.apps, [p.app]: p.port });
         const known = this.peerBook.get(id);
-        if (known && (known.lastIp !== p.ip || known.lastPort !== p.port)) this.peerBook.update(id, { lastIp: p.ip, lastPort: p.port });
+        if (known && (known.lastIp !== p.ip || port && known.lastPort !== port)) this.peerBook.update(id, { lastIp: p.ip, ...port ? { lastPort: port } : {} });
         seen.push(id);
       }
     }
@@ -4129,6 +4189,7 @@ var FriendNet = class {
         const next = { away, status: status ?? "available", ...msg ? { msg } : {}, extra };
         if (JSON.stringify(next) === JSON.stringify(this.presenceMap.get(id))) return;
         this.presenceMap.set(id, next);
+        this.rememberStatus(id, next);
         this.opts.hooks.presence?.(id, next);
         this.changed();
         return;
@@ -4141,6 +4202,14 @@ var FriendNet = class {
         if (this.contacts.get(id)?.state === "blocked") return;
         this.opts.hooks.message(s, m);
     }
+  }
+  /** Keeps a friend's status in friends.json, so termhub and our other apps know it without a session. */
+  rememberStatus(id, p) {
+    const c2 = this.contacts.get(id);
+    if (!c2) return;
+    const status = p.status === "available" ? void 0 : p.status;
+    if ((c2.status ?? void 0) === status && c2.statusMsg === p.msg) return;
+    this.contacts.upsert(id, { status, statusMsg: p.msg });
   }
   /** Their links: an old id we know is them now. Only links to the session's own key count. */
   onLinks(s, links) {
@@ -5643,11 +5712,28 @@ var MouseFilterStdin = class extends PassThrough {
     super();
     this.source = source;
     source.setEncoding("utf8");
-    source.on("data", (chunk) => this.feed(chunk));
+    source.on("data", this.onData);
+    source.resume();
   }
   isTTY = true;
   pending = "";
   timer = null;
+  onData = (chunk) => this.feed(chunk);
+  /**
+   * Stops reading the terminal: the real stdin is paused and no longer fed in here. termhub
+   * does this before another app takes over the terminal, so no keystroke goes to both.
+   */
+  detach() {
+    this.source.off("data", this.onData);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.pending = "";
+    try {
+      this.source.setRawMode(false);
+    } catch {
+    }
+    this.source.pause();
+  }
   feed(chunk) {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -6219,7 +6305,7 @@ function PromptDialog({ spec, width }) {
   ] });
 }
 function PickDialog({ spec, width }) {
-  const [cursor, setCursor] = useState3(0);
+  const [cursor, setCursor] = useState3(() => Math.max(0, spec.options.findIndex((o) => o.id === spec.opts?.initial)));
   const [chosen, setChosen] = useState3(() => new Set(spec.opts?.preselect ?? []));
   const n = spec.options.length;
   useWheel((dir) => setCursor((c2) => Math.max(0, Math.min(n - 1, c2 + dir))));
@@ -6487,13 +6573,13 @@ function revealPath(p, platform = process.platform) {
   return run("xdg-open", [target === p ? path18.dirname(p) : target]);
 }
 
-// src/ui/screens/useCommandInput.ts
+// ../termcore/src/ui/commands/useCommandInput.ts
 import { useEffect as useEffect4, useState as useState4 } from "react";
-function useCommandInput({ editor, setEditor, onSubmit, onEscape }) {
+function useCommandInput({ registry: registry2, editor, setEditor, onSubmit, onEscape }) {
   const [selected, setSelected] = useState4(0);
   const match = /^\/(\S*)$/.exec(editor.value);
   const filter = match?.[1] ?? null;
-  const commands = filter !== null ? registry.suggest(filter) : [];
+  const commands = filter !== null ? registry2.suggest(filter) : [];
   const items = commands.map((c2) => ({ key: c2.name, label: `/${c2.name} ${c2.usage ?? ""}`.trimEnd(), description: c2.description }));
   const sel = Math.min(selected, Math.max(0, items.length - 1));
   useEffect4(() => setSelected(0), [filter]);
@@ -6517,7 +6603,7 @@ function useCommandInput({ editor, setEditor, onSubmit, onEscape }) {
         return true;
       }
       if (key.return && !key.meta) {
-        const exact = filter ? registry.find(filter) : void 0;
+        const exact = filter ? registry2.find(filter) : void 0;
         const target = exact ?? (commands.length === 1 ? commands[0] : null);
         if (!target || (target.minArgs ?? 0) > 0) complete(target ?? commands[sel]);
         else onSubmit(`/${target.name}`);
@@ -6531,6 +6617,11 @@ function useCommandInput({ editor, setEditor, onSubmit, onEscape }) {
     return false;
   };
   return { items, selected: sel, onKey, submit: onSubmit };
+}
+
+// src/ui/screens/useCommandInput.ts
+function useCommandInput2(opts) {
+  return useCommandInput({ registry, ...opts });
 }
 
 // src/ui/screens/Dashboard.tsx
@@ -6603,7 +6694,7 @@ function Dashboard(props) {
     setEditor(emptyEditor);
   };
   const selectedId = current?.type === "friend" ? current.friend.id : null;
-  const cmd = useCommandInput({
+  const cmd = useCommandInput2({
     editor,
     setEditor,
     onSubmit: async (value) => {
@@ -7109,58 +7200,123 @@ function FilePicker({ store, width, height, files, notices, onChange, onNext, on
 }
 
 // ../termcore/src/ui/components/Onboarding.tsx
-import { Box as Box12, Text as Text13, useInput as useInput6 } from "ink";
+import { Box as Box13, Text as Text14, useInput as useInput6 } from "ink";
 import { useState as useState7 } from "react";
-import { Fragment as Fragment6, jsx as jsx13, jsxs as jsxs12 } from "react/jsx-runtime";
-function Onboarding({ logo, tagline, width, create, onDone, question = "What should your friends see you as?" }) {
+
+// ../termcore/src/ui/components/Swatches.tsx
+import { Box as Box12, Text as Text13 } from "ink";
+import { jsx as jsx13, jsxs as jsxs12 } from "react/jsx-runtime";
+var SWATCH_WIDTH = 4;
+function Swatches({ colors, selected, width, active = true }) {
+  const perRow = Math.max(1, Math.floor(width / SWATCH_WIDTH));
+  const rows = [];
+  colors.forEach((c2, index) => {
+    const r = Math.floor(index / perRow);
+    (rows[r] ??= []).push({ hex: c2.hex, index });
+  });
+  return /* @__PURE__ */ jsx13(Box12, { flexDirection: "column", children: rows.map((row, r) => /* @__PURE__ */ jsx13(Text13, { children: row.map(({ hex, index }) => {
+    const sel = index === selected;
+    const bracket = sel ? active ? theme.accent : theme.dim : void 0;
+    return /* @__PURE__ */ jsxs12(Text13, { children: [
+      /* @__PURE__ */ jsx13(Text13, { color: bracket, children: sel ? "[" : " " }),
+      /* @__PURE__ */ jsx13(Text13, { color: hex, children: "\u2588\u2588" }),
+      /* @__PURE__ */ jsx13(Text13, { color: bracket, children: sel ? "]" : " " })
+    ] }, index);
+  }) }, r)) });
+}
+
+// ../termcore/src/ui/components/Onboarding.tsx
+import { Fragment as Fragment6, jsx as jsx14, jsxs as jsxs13 } from "react/jsx-runtime";
+function Onboarding({ logo, tagline, width, create, onDone, question = "What should your friends see you as?", colors }) {
   const [editor, setEditor] = useState7(emptyEditor);
+  const [name, setName] = useState7(null);
+  const [colorIndex, setColorIndex] = useState7(0);
   const [created, setCreated] = useState7(null);
   const [error, setError] = useState7(null);
   useInput6((_i, key) => key.return && onDone(), { isActive: created !== null });
-  const submit = (value) => {
-    const name = value.trim();
-    if (!name) {
-      setError("Please enter a name.");
-      return;
-    }
+  const finish2 = (n, color) => {
     try {
-      setCreated({ name, id: create(name) });
+      setCreated({ name: n, id: create(n, color), ...color ? { color } : {} });
     } catch (err) {
       setError(`Could not create profile: ${err.message}`);
     }
   };
+  const submit = (value) => {
+    const n = value.trim();
+    if (!n) {
+      setError("Please enter a name.");
+      return;
+    }
+    if (colors?.length) setName(n);
+    else finish2(n);
+  };
+  const picking = name !== null && created === null && !!colors?.length;
+  useInput6(
+    (input, key) => {
+      const n = colors.length;
+      if (key.leftArrow || input === "h") setColorIndex((i) => (i - 1 + n) % n);
+      else if (key.rightArrow || input === "l" || key.tab) setColorIndex((i) => (i + 1) % n);
+      else if (key.escape) setName(null);
+      else if (key.return) finish2(name, colors[colorIndex].hex);
+    },
+    { isActive: picking }
+  );
   const boxWidth = Math.min(64, width - 4);
-  return /* @__PURE__ */ jsxs12(Box12, { flexDirection: "column", paddingX: 2, paddingY: 1, children: [
-    logo.map((l, i) => /* @__PURE__ */ jsx13(Text13, { color: theme.accent, children: l }, i)),
-    /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: tagline }),
-    /* @__PURE__ */ jsx13(Text13, { children: " " }),
-    created ? /* @__PURE__ */ jsxs12(Fragment6, { children: [
-      /* @__PURE__ */ jsxs12(Text13, { children: [
+  let body;
+  if (created) {
+    body = /* @__PURE__ */ jsxs13(Fragment6, { children: [
+      /* @__PURE__ */ jsxs13(Text14, { children: [
         "Welcome, ",
-        /* @__PURE__ */ jsx13(Text13, { bold: true, children: created.name }),
+        /* @__PURE__ */ jsx14(Text14, { bold: true, color: created.color, children: created.name }),
         "!"
       ] }),
-      /* @__PURE__ */ jsx13(Text13, { children: " " }),
-      /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: "Your personal ID has been created:" }),
-      /* @__PURE__ */ jsxs12(Text13, { color: theme.accent, bold: true, children: [
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "Your personal ID has been created:" }),
+      /* @__PURE__ */ jsxs13(Text14, { color: theme.accent, bold: true, children: [
         "  ",
         formatId(created.id, true)
       ] }),
-      /* @__PURE__ */ jsx13(Text13, { children: " " }),
-      /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: "It's tied to a secret key on this device. That's how your friends recognize" }),
-      /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: "you \u2013 even if your name or IP address changes. termchat, keyrace and termdrop" }),
-      /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: "share it, along with your friends. Every connection is end-to-end encrypted." }),
-      /* @__PURE__ */ jsx13(Text13, { children: " " }),
-      /* @__PURE__ */ jsxs12(Text13, { children: [
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "It's tied to a secret key on this device. That's how your friends recognize" }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "you \u2013 even if your name or IP address changes. termchat, keyrace, termdrop and" }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "termhub share it, along with your friends. Every connection is end-to-end encrypted." }),
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsxs13(Text14, { children: [
         "Press ",
-        /* @__PURE__ */ jsx13(Text13, { color: theme.accent, children: "enter" }),
+        /* @__PURE__ */ jsx14(Text14, { color: theme.accent, children: "enter" }),
         " to continue"
       ] })
-    ] }) : /* @__PURE__ */ jsxs12(Fragment6, { children: [
-      /* @__PURE__ */ jsx13(Text13, { bold: true, children: question }),
-      /* @__PURE__ */ jsx13(Text13, { color: theme.dim, children: "You can change it later with /name." }),
-      /* @__PURE__ */ jsx13(Text13, { children: " " }),
-      /* @__PURE__ */ jsx13(
+    ] });
+  } else if (picking) {
+    const current = colors[colorIndex];
+    body = /* @__PURE__ */ jsxs13(Fragment6, { children: [
+      /* @__PURE__ */ jsx14(Text14, { bold: true, children: "Pick your color" }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "Friends see your name in it, in every app. You can change it later." }),
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsx14(Swatches, { colors, selected: colorIndex, width: boxWidth }),
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsxs13(Text14, { children: [
+        "  ",
+        /* @__PURE__ */ jsx14(Text14, { bold: true, color: current.hex, children: name }),
+        /* @__PURE__ */ jsxs13(Text14, { color: theme.dim, children: [
+          " \xB7 ",
+          current.name
+        ] })
+      ] }),
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: "\u2190\u2192 choose \xB7 enter confirm \xB7 esc back to the name" }),
+      error ? /* @__PURE__ */ jsx14(Text14, { color: theme.error, children: error }) : null
+    ] });
+  } else {
+    body = /* @__PURE__ */ jsxs13(Fragment6, { children: [
+      /* @__PURE__ */ jsx14(Text14, { bold: true, children: question }),
+      /* @__PURE__ */ jsxs13(Text14, { color: theme.dim, children: [
+        "You can change it later",
+        colors ? " in termhub" : " with /name",
+        "."
+      ] }),
+      /* @__PURE__ */ jsx14(Text14, { children: " " }),
+      /* @__PURE__ */ jsx14(
         InputBox,
         {
           state: editor,
@@ -7176,15 +7332,21 @@ function Onboarding({ logo, tagline, width, create, onDone, question = "What sho
           borderColor: theme.accent
         }
       ),
-      error ? /* @__PURE__ */ jsx13(Text13, { color: theme.error, children: error }) : null
-    ] })
+      error ? /* @__PURE__ */ jsx14(Text14, { color: theme.error, children: error }) : null
+    ] });
+  }
+  return /* @__PURE__ */ jsxs13(Box13, { flexDirection: "column", paddingX: 2, paddingY: 1, children: [
+    logo.map((l, i) => /* @__PURE__ */ jsx14(Text14, { color: theme.accent, children: l }, i)),
+    /* @__PURE__ */ jsx14(Text14, { color: theme.dim, children: tagline }),
+    /* @__PURE__ */ jsx14(Text14, { children: " " }),
+    body
   ] });
 }
 
 // src/ui/screens/RecipientPicker.tsx
-import { Box as Box13, Text as Text14, useInput as useInput7 } from "ink";
+import { Box as Box14, Text as Text15, useInput as useInput7 } from "ink";
 import { useEffect as useEffect6, useState as useState8 } from "react";
-import { Fragment as Fragment7, jsx as jsx14, jsxs as jsxs13 } from "react/jsx-runtime";
+import { Fragment as Fragment7, jsx as jsx15, jsxs as jsxs14 } from "react/jsx-runtime";
 function RecipientPicker({ store, width, height, files, to, onSend, onEditFiles, onCancel }) {
   const friends = store.onlineFriends();
   const [cursor, setCursor] = useState8(0);
@@ -7232,10 +7394,10 @@ function RecipientPicker({ store, width, height, files, to, onSend, onEditFiles,
   const visible = friends.slice(start2, start2 + listRows);
   const total = files.reduce((n, f) => n + f.size, 0);
   const waitingFor = to && !preselected ? to : null;
-  return /* @__PURE__ */ jsxs13(Box13, { flexDirection: "column", width, height, children: [
-    /* @__PURE__ */ jsxs13(Box13, { paddingX: 1, width, children: [
-      /* @__PURE__ */ jsx14(Text14, { color: theme.dim, bold: true, children: "SEND TO" }),
-      /* @__PURE__ */ jsxs13(Text14, { color: theme.dim, wrap: "truncate-end", children: [
+  return /* @__PURE__ */ jsxs14(Box14, { flexDirection: "column", width, height, children: [
+    /* @__PURE__ */ jsxs14(Box14, { paddingX: 1, width, children: [
+      /* @__PURE__ */ jsx15(Text15, { color: theme.dim, bold: true, children: "SEND TO" }),
+      /* @__PURE__ */ jsxs14(Text15, { color: theme.dim, wrap: "truncate-end", children: [
         " ",
         "\xB7 ",
         filesLabel(files),
@@ -7244,42 +7406,42 @@ function RecipientPicker({ store, width, height, files, to, onSend, onEditFiles,
         ticked.length ? ` \xB7 ${ticked.length} selected` : ""
       ] })
     ] }),
-    /* @__PURE__ */ jsx14(Text14, { children: " " }),
-    /* @__PURE__ */ jsx14(Box13, { flexDirection: "column", height: listRows, paddingX: 1, overflow: "hidden", children: friends.length === 0 ? /* @__PURE__ */ jsxs13(Fragment7, { children: [
-      /* @__PURE__ */ jsxs13(Text14, { color: theme.dim, wrap: "wrap", children: [
+    /* @__PURE__ */ jsx15(Text15, { children: " " }),
+    /* @__PURE__ */ jsx15(Box14, { flexDirection: "column", height: listRows, paddingX: 1, overflow: "hidden", children: friends.length === 0 ? /* @__PURE__ */ jsxs14(Fragment7, { children: [
+      /* @__PURE__ */ jsxs14(Text15, { color: theme.dim, wrap: "wrap", children: [
         icons.pending,
         " No friends online right now",
         offline ? ` (${plural(offline, "friend")} offline)` : "",
         ". They show up here as soon as they connect."
       ] }),
-      /* @__PURE__ */ jsx14(Text14, { color: theme.faint, wrap: "wrap", children: "New friends: press esc, pick someone under Nearby, or press a and enter their IP." })
+      /* @__PURE__ */ jsx15(Text15, { color: theme.faint, wrap: "wrap", children: "New friends: press esc, pick someone under Nearby, or press a and enter their IP." })
     ] }) : visible.map((f, i) => {
       const active = start2 + i === sel;
       const on = chosen.has(f.id);
-      return /* @__PURE__ */ jsxs13(Box13, { children: [
-        /* @__PURE__ */ jsx14(Text14, { color: theme.accent, children: active ? `${icons.pointer} ` : "  " }),
-        /* @__PURE__ */ jsx14(Text14, { color: on ? theme.success : theme.dim, children: on ? "[x] " : "[ ] " }),
-        /* @__PURE__ */ jsxs13(Text14, { color: theme.success, children: [
+      return /* @__PURE__ */ jsxs14(Box14, { children: [
+        /* @__PURE__ */ jsx15(Text15, { color: theme.accent, children: active ? `${icons.pointer} ` : "  " }),
+        /* @__PURE__ */ jsx15(Text15, { color: on ? theme.success : theme.dim, children: on ? "[x] " : "[ ] " }),
+        /* @__PURE__ */ jsxs14(Text15, { color: theme.success, children: [
           icons.online,
           " "
         ] }),
-        /* @__PURE__ */ jsx14(Text14, { bold: active, color: active ? theme.accent : void 0, wrap: "truncate-end", children: f.display }),
-        f.trusted ? /* @__PURE__ */ jsxs13(Text14, { color: theme.warning, children: [
+        /* @__PURE__ */ jsx15(Text15, { bold: active, color: active ? theme.accent : void 0, wrap: "truncate-end", children: f.display }),
+        f.trusted ? /* @__PURE__ */ jsxs14(Text15, { color: theme.warning, children: [
           " ",
           icons.star
         ] }) : null,
-        f.away ? /* @__PURE__ */ jsx14(Text14, { color: theme.faint, children: " \xB7 away" }) : null
+        f.away ? /* @__PURE__ */ jsx15(Text15, { color: theme.faint, children: " \xB7 away" }) : null
       ] }, f.id);
     }) }),
-    /* @__PURE__ */ jsx14(Text14, { children: " " }),
-    /* @__PURE__ */ jsx14(Box13, { paddingX: 1, children: /* @__PURE__ */ jsx14(Text14, { color: theme.dim, wrap: "truncate-end", children: waitingFor ? `Waiting for ${waitingFor} to come online \u2026` : ticked.length ? `enter sends to ${ticked.map((f) => f.display).join(", ")}` : friends[sel] ? `enter sends to ${friends[sel].display} \u2013 space ticks more` : "" }) }),
-    /* @__PURE__ */ jsx14(Text14, { children: " " }),
-    /* @__PURE__ */ jsx14(Footer, { hints: ["enter send", "space select", "a all", "\u2191\u2193 move", "f edit files", "esc cancel"], toast: store.toast, width })
+    /* @__PURE__ */ jsx15(Text15, { children: " " }),
+    /* @__PURE__ */ jsx15(Box14, { paddingX: 1, children: /* @__PURE__ */ jsx15(Text15, { color: theme.dim, wrap: "truncate-end", children: waitingFor ? `Waiting for ${waitingFor} to come online \u2026` : ticked.length ? `enter sends to ${ticked.map((f) => f.display).join(", ")}` : friends[sel] ? `enter sends to ${friends[sel].display} \u2013 space ticks more` : "" }) }),
+    /* @__PURE__ */ jsx15(Text15, { children: " " }),
+    /* @__PURE__ */ jsx15(Footer, { hints: ["enter send", "space select", "a all", "\u2191\u2193 move", "f edit files", "esc cancel"], toast: store.toast, width })
   ] });
 }
 
 // src/ui/App.tsx
-import { jsx as jsx15, jsxs as jsxs14 } from "react/jsx-runtime";
+import { jsx as jsx16, jsxs as jsxs15 } from "react/jsx-runtime";
 function Root({
   paths,
   options,
@@ -7321,7 +7483,7 @@ function Root({
   }, [phase.name]);
   const height = Math.max(10, rows - 1);
   if (phase.name === "onboarding") {
-    return /* @__PURE__ */ jsx15(
+    return /* @__PURE__ */ jsx16(
       Onboarding,
       {
         logo: LOGO_SMALL,
@@ -7333,16 +7495,16 @@ function Root({
     );
   }
   if (phase.name === "starting") {
-    return /* @__PURE__ */ jsx15(Box14, { paddingX: 2, paddingY: 1, children: /* @__PURE__ */ jsx15(Text15, { color: theme.dim, children: "Starting termdrop \u2026" }) });
+    return /* @__PURE__ */ jsx16(Box15, { paddingX: 2, paddingY: 1, children: /* @__PURE__ */ jsx16(Text16, { color: theme.dim, children: "Starting termdrop \u2026" }) });
   }
   if (phase.name === "error") {
-    return /* @__PURE__ */ jsxs14(Box14, { paddingX: 2, paddingY: 1, flexDirection: "column", children: [
-      /* @__PURE__ */ jsx15(Text15, { color: theme.error, bold: true, children: "termdrop could not start" }),
-      /* @__PURE__ */ jsx15(Text15, { children: phase.message }),
-      /* @__PURE__ */ jsx15(Text15, { color: theme.dim, children: "ctrl+c to quit" })
+    return /* @__PURE__ */ jsxs15(Box15, { paddingX: 2, paddingY: 1, flexDirection: "column", children: [
+      /* @__PURE__ */ jsx16(Text16, { color: theme.error, bold: true, children: "termdrop could not start" }),
+      /* @__PURE__ */ jsx16(Text16, { children: phase.message }),
+      /* @__PURE__ */ jsx16(Text16, { color: theme.dim, children: "ctrl+c to quit" })
     ] });
   }
-  return /* @__PURE__ */ jsx15(Main, { store: phase.store, width: columns, height, rows, quit, inbox });
+  return /* @__PURE__ */ jsx16(Main, { store: phase.store, width: columns, height, rows, quit, inbox });
 }
 function Main({
   store,
@@ -7458,7 +7620,7 @@ function Main({
   const bodyHeight = height - 2;
   let body;
   if (flow?.step === "files") {
-    body = /* @__PURE__ */ jsx15(
+    body = /* @__PURE__ */ jsx16(
       FilePicker,
       {
         store,
@@ -7472,7 +7634,7 @@ function Main({
       }
     );
   } else if (flow?.step === "recipients") {
-    body = /* @__PURE__ */ jsx15(
+    body = /* @__PURE__ */ jsx16(
       RecipientPicker,
       {
         store,
@@ -7486,9 +7648,9 @@ function Main({
       }
     );
   } else if (panel) {
-    body = /* @__PURE__ */ jsx15(Panel, { text: panel, width, height: bodyHeight, onClose: () => setPanel(null) });
+    body = /* @__PURE__ */ jsx16(Panel, { text: panel, width, height: bodyHeight, onClose: () => setPanel(null) });
   } else {
-    body = /* @__PURE__ */ jsx15(
+    body = /* @__PURE__ */ jsx16(
       Dashboard,
       {
         store,
@@ -7507,8 +7669,8 @@ function Main({
       }
     );
   }
-  return /* @__PURE__ */ jsxs14(Box14, { flexDirection: "column", width, height, children: [
-    /* @__PURE__ */ jsx15(
+  return /* @__PURE__ */ jsxs15(Box15, { flexDirection: "column", width, height, children: [
+    /* @__PURE__ */ jsx16(
       Header,
       {
         app: "termdrop",
@@ -7525,7 +7687,7 @@ function Main({
 }
 
 // src/cli.tsx
-import { jsx as jsx16 } from "react/jsx-runtime";
+import { jsx as jsx17 } from "react/jsx-runtime";
 var HELP = `termdrop \u2013 end-to-end encrypted file sharing with friends on your local network
 
 Usage: termdrop [files\u2026] [--to <name>] [options]
@@ -7699,7 +7861,7 @@ termdrop crashed: ${err instanceof Error ? err.stack ?? err.message : String(err
   process.on("unhandledRejection", crash);
   for (const sig of ["SIGTERM", "SIGHUP"]) process.on(sig, () => process.exit(0));
   const app = render(
-    /* @__PURE__ */ jsx16(Root, { paths, options: { port, discovery: !values["no-discovery"], debug: values.debug }, inbox, notice }),
+    /* @__PURE__ */ jsx17(Root, { paths, options: { port, discovery: !values["no-discovery"], debug: values.debug }, inbox, notice }),
     { exitOnCtrlC: false, patchConsole: true, stdin: new MouseFilterStdin(process.stdin) }
   );
   app.waitUntilExit().then(
