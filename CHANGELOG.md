@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.0 – 2026-10-17
+
+- Send files to friends who only have another app open: they're told there, and the offer arrives when they open termdrop (or expires after 30 minutes); messages and invites from the other apps show up here too
+
 ## 2.1.0 – 2026-10-15
 
 - termhub is here: the README says how to get it – it installs, opens and updates the apps

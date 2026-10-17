@@ -1,6 +1,6 @@
 {
   "name": "termdrop",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "End-to-end encrypted file sharing with friends on your local network, right in the terminal.",
   "repository": {
     "type": "git",
