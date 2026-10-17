@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Toasts, type NoteKind, type Toast } from 'termcore/app/toasts';
 import { displayName, type ContactOf } from 'termcore/friends/book';
 import { appendLog, FriendNet, type FriendEvent, type PeerPresence } from 'termcore/friends/net';
+import { noticeLine } from 'termcore/friends/notices';
 import type { Status } from 'termcore/friends/profile';
 import type { ContactState } from 'termcore/friends/state';
 import type { DiscoveredPeer, DiscoveryOptions } from 'termcore/net/discovery';
@@ -56,6 +57,8 @@ export interface FriendView extends Contact {
   /** their status (only while connected) */
   status: Status;
   statusMsg?: string;
+  /** not online in termdrop, but in these apps of theirs (an offer waits for them to open termdrop) */
+  elsewhere: string[];
 }
 
 export type RequestEntry = { kind: 'friend'; friend: FriendView } | { kind: 'offer'; offer: Transfer };
@@ -82,6 +85,9 @@ export interface SendRequest {
   recipients?: boolean;
 }
 
+/** How long a notice about files waiting is worth delivering (the offer itself waits 30 minutes). */
+const OFFER_NOTICE_TTL = 30 * 60_000;
+
 const FRIEND_ORDER: Record<ContactState, number> = { accepted: 0, outgoing: 1, declined: 2, incoming: 3, blocked: 4 };
 
 /**
@@ -98,6 +104,7 @@ export class AppStore {
   private readonly toasts: Toasts;
   private listeners = new Set<() => void>();
   private notifyQueued = false;
+  private started = false;
   private sendSeq = 0;
   version = 0;
   /** Newer version on GitHub (checked by the UI at launch), shown in the header. */
@@ -127,6 +134,9 @@ export class AppStore {
         event: (e) => this.onEvent(e),
         message: (s, m) => this.transfers.onWire(s.peerId, m),
         offline: (id) => this.transfers.onPeerOffline(id),
+        session: (s) => this.transfers.onPeerOnline(s.peerId),
+        // offers that came as notices: the real one follows once the sender's termdrop connects
+        takeNotices: () => {},
         // a friendship that has to be confirmed again starts without trust
         statePatch: (prev, next) => (prev === 'accepted' && next !== 'accepted' ? { trusted: false } : {}),
         purpose: ({ fs, hs, xid }) => this.transfers.onLink(new DataLink(fs, hs, xid)),
@@ -141,6 +151,12 @@ export class AppStore {
     this.transfers = new TransferManager({
       send: (id, msg) => this.net.send(id, msg),
       isOnline: (id) => this.net.isOnline(id),
+      reachable: (id) => this.net.elsewhere(id).length > 0,
+      noticeOffer: (id, xid, text) => {
+        this.net.sendNotice(id, { id: `drop-${xid}`, kind: 'offer', title: this.net.name, body: text, ttlMs: OFFER_NOTICE_TTL });
+      },
+      withdrawOffer: (id, xid) => this.net.withdrawNotice(`drop-${xid}`, id),
+      announce: (from, xid, text) => this.net.noteLocally(from, { id: `drop-${xid}`, kind: 'offer', title: this.peerName(from), body: text }),
       isFriend: (id) => this.contacts.get(id)?.state === 'accepted',
       isTrusted: (id) => this.contacts.get(id)?.trusted === true,
       quiet: () => this.net.dnd,
@@ -190,10 +206,12 @@ export class AppStore {
 
   async start(): Promise<void> {
     await this.net.start();
+    this.started = true;
     this.changed();
   }
 
   async stop(): Promise<void> {
+    this.started = false;
     this.transfers.stop();
     this.toasts.stop();
     await this.net.stop();
@@ -214,6 +232,8 @@ export class AppStore {
     this.notifyQueued = true;
     queueMicrotask(() => {
       this.notifyQueued = false;
+      // offers waiting for an answer, for termhub's badge (only while termdrop runs)
+      if (this.started) this.net.setWaiting(this.transfers.incomingOffers().length, true);
       for (const fn of this.listeners) fn();
     });
   }
@@ -251,6 +271,7 @@ export class AppStore {
       online,
       away: online && (p?.away ?? false),
       busy: this.transfers.busyWith(id),
+      elsewhere: online ? [] : this.net.elsewhere(id),
       status: p?.status ?? 'available',
       ...(p?.msg ? { statusMsg: p.msg } : {}),
     };
@@ -261,13 +282,14 @@ export class AppStore {
     return this.net.peerName(id);
   }
 
-  /** Accepted friends who are online right now (who can receive files). */
+  /** Accepted friends who can get files: online here, or in another app (the offer waits for them). */
   onlineFriends(): FriendView[] {
     return this.contacts
       .all()
-      .filter((c) => c.state === 'accepted' && this.isOnline(c.id))
+      .filter((c) => c.state === 'accepted')
       .map((c) => this.friend(c.id)!)
-      .sort((a, b) => a.display.localeCompare(b.display));
+      .filter((f) => f.online || f.elsewhere.length > 0)
+      .sort((a, b) => Number(b.online) - Number(a.online) || a.display.localeCompare(b.display));
   }
 
   /** An online friend by name, nickname or ID (for `--to`); null if none or ambiguous. */
@@ -282,7 +304,7 @@ export class AppStore {
 
   dashboard(): DashboardData {
     const all = this.contacts.all().map((c) => this.friend(c.id)!);
-    const presence = (f: FriendView) => (f.state !== 'accepted' ? 4 : f.busy && f.online ? 0 : f.online && !f.away ? 1 : f.away ? 2 : 3);
+    const presence = (f: FriendView) => (f.state !== 'accepted' ? 5 : f.busy && f.online ? 0 : f.online && !f.away ? 1 : f.away ? 2 : f.elsewhere.length ? 3 : 4);
     const friends = all
       .filter((f) => f.state !== 'incoming')
       .sort(
@@ -388,6 +410,8 @@ export class AppStore {
             '(Windows: allow Node.js for public networks · macOS: allow incoming connections for node).',
           'error',
         );
+      case 'notice':
+        return this.showToast(noticeLine(e.notice));
       case 'linked':
         return;
     }

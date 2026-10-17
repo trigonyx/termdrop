@@ -5,6 +5,7 @@ import type { LocalFile } from '../../transfer/local.js';
 import { filesLabel, formatBytes, plural } from '../../transfer/units.js';
 import { Footer } from 'termcore/ui/components/Footer';
 import { useWheel } from 'termcore/ui/mouse';
+import { elsewhereDot, elsewhereText } from 'termcore/ui/presence';
 import { icons, theme } from 'termcore/ui/theme';
 
 interface Props {
@@ -110,12 +111,13 @@ export function RecipientPicker({ store, width, height, files, to, onSend, onEdi
               <Box key={f.id}>
                 <Text color={theme.accent}>{active ? `${icons.pointer} ` : '  '}</Text>
                 <Text color={on ? theme.success : theme.dim}>{on ? '[x] ' : '[ ] '}</Text>
-                <Text color={theme.success}>{icons.online} </Text>
+                <Text color={f.online ? theme.success : elsewhereDot().color}>{f.online ? icons.online : elsewhereDot().icon} </Text>
                 <Text bold={active} color={active ? theme.accent : undefined} wrap="truncate-end">
                   {f.display}
                 </Text>
                 {f.trusted ? <Text color={theme.warning}> {icons.star}</Text> : null}
                 {f.away ? <Text color={theme.faint}> · away</Text> : null}
+                {!f.online ? <Text color={theme.faint} wrap="truncate-end"> · {elsewhereText(f.elsewhere)}</Text> : null}
               </Box>
             );
           })

@@ -45,6 +45,8 @@ export interface Transfer {
   saved?: string[];
   /** outgoing: the local files */
   paths?: string[];
+  /** outgoing, waiting: they don't have termdrop open – told in another app, offered once it connects */
+  parked?: boolean;
 }
 
 export type TransferEvent =

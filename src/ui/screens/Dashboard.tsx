@@ -17,7 +17,7 @@ import { cleanPaste, edit, emptyEditor, type EditorState } from 'termcore/ui/edi
 import { usePaste, useWheel } from 'termcore/ui/mouse';
 import { openPath, revealPath } from '../open.js';
 import { icons, theme, personHex } from 'termcore/ui/theme';
-import { presenceDot, statusText } from 'termcore/ui/presence';
+import { elsewhereDot, elsewhereText, presenceDot, statusText } from 'termcore/ui/presence';
 import { useCommandInput } from './useCommandInput.js';
 
 type Entry =
@@ -68,6 +68,7 @@ function friendStatus(f: FriendView): { icon: string; color: string; text: strin
     case 'blocked':
       return { icon: icons.error, color: theme.error, text: 'blocked' };
     default: {
+      if (!f.online && f.elsewhere.length) return { ...elsewhereDot(), text: elsewhereText(f.elsewhere) };
       if (!f.online) return { icon: icons.offline, color: theme.faint, text: 'offline' };
       // their status (busy, do not disturb, a message) comes with their presence
       const status = statusText(f.status, f.statusMsg);
@@ -168,7 +169,7 @@ export function Dashboard(props: Props) {
     if (e.type === 'nearby') return attempt(() => store.requestNearby(e.peer.id));
     const f = e.friend;
     if (f.state === 'accepted') {
-      if (!f.online) return store.showToast(`${f.display} is offline`, 'error');
+      if (!f.online && !f.elsewhere.length) return store.showToast(`${f.display} is offline`, 'error');
       return actions.sendFiles(undefined, { to: f.id });
     }
     if (f.state === 'declined') return attempt(() => store.request(f.id));

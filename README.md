@@ -165,6 +165,7 @@ See [termhub](https://github.com/trigonyx/termhub).
 
 ## On macOS
 
+- **Friends without termdrop open:** a friend who only has termhub, termchat or keyrace open shows up as `◌ in termhub` and can still be picked as a recipient. The offer waits (`◷ notified`) – they see `termdrop · Alice wants to send you 2 files · 4 MB` where they are, and once they open termdrop the offer arrives. If they don't within 30 minutes, it expires; cancelling takes the notice back. Offers you get show up in your other open apps too.
 - **Notifications:** a system banner appears for incoming files while the terminal window is in the background. Toggle with `/notifications on|off`. It needs a terminal that reports focus (Terminal.app, iTerm2). On Linux, termdrop uses `notify-send` if it's installed.
 - Works in Terminal.app and iTerm2 from 60 columns on; below 84 columns the transfers panel moves under the list, and narrow or short windows get a compact logo.
 

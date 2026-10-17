@@ -3,7 +3,7 @@ import path from 'node:path';
 import { displayName } from 'termcore/friends/book';
 import { formatId } from 'termcore/net/identity';
 import { duration, shortTime } from 'termcore/ui/format';
-import { statusText } from 'termcore/ui/presence';
+import { elsewhereText, statusText } from 'termcore/ui/presence';
 import { APP } from '../app.js';
 import { tildify } from '../core/paths.js';
 import {
@@ -202,7 +202,7 @@ export const builtinCommands: Command[] = [
         `### ${f.display}${f.alias ? ` _(calls themselves ${f.name})_` : ''}`,
         '',
         `- **ID** \`${formatId(f.id, true)}\``,
-        `- **Status** ${f.away ? 'away' : f.online ? 'online' : 'offline'}${f.online && statusText(f.status, f.statusMsg) ? ` · ${statusText(f.status, f.statusMsg)}` : ''} · ${STATE_LABEL[f.state] ?? f.state}${f.trusted ? ' · ★ trusted (files are accepted automatically)' : ''}`,
+        `- **Status** ${f.away ? 'away' : f.online ? 'online' : f.elsewhere.length ? elsewhereText(f.elsewhere) : 'offline'}${f.online && statusText(f.status, f.statusMsg) ? ` · ${statusText(f.status, f.statusMsg)}` : ''} · ${STATE_LABEL[f.state] ?? f.state}${f.trusted ? ' · ★ trusted (files are accepted automatically)' : ''}`,
         `- **Address** ${f.lastIp ? `\`${f.lastIp}:${f.lastPort ?? '?'}\`` : 'unknown'}`,
         `- **Safety code** ${code ? `\`${code}\`` : 'not connected yet'}`,
         '',

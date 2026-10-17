@@ -90,7 +90,7 @@ function LiveRow({ t, width, selected, nameW }: { t: Transfer; width: number; se
       {t.status === 'waiting' ? (
         <Box flexShrink={0} marginLeft={1}>
           <Text color={theme.warning}>
-            {icons.pending} waiting
+            {icons.pending} {t.parked ? 'notified' : 'waiting'}
           </Text>
         </Box>
       ) : null}

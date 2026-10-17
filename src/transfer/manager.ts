@@ -28,6 +28,8 @@ export interface TransferTuning {
   maxPerPeer: number;
   /** finished transfers kept in memory (older ones are only in the history) */
   keepFinished: number;
+  /** an offer to someone without termdrop open waits this long for them to open it */
+  parkMs: number;
 }
 
 export const DEFAULT_TUNING: TransferTuning = {
@@ -39,11 +41,20 @@ export const DEFAULT_TUNING: TransferTuning = {
   maxIncoming: 8,
   maxPerPeer: 5,
   keepFinished: 50,
+  parkMs: 30 * 60_000,
 };
 
 export interface TransferDeps {
   send(id: string, msg: Wire): boolean;
   isOnline(id: string): boolean;
+  /** not online in termdrop, but in another app: the offer waits, and they're told there */
+  reachable?(id: string): boolean;
+  /** tell them in their other app that files are waiting for them */
+  noticeOffer?(id: string, xid: string, text: string): void;
+  /** that offer is over */
+  withdrawOffer?(id: string, xid: string): void;
+  /** an offer reached us: my other apps may show it */
+  announce?(from: string, xid: string, text: string): void;
   /** accepted and not blocked – only friends can send us files */
   isFriend(id: string): boolean;
   isTrusted(id: string): boolean;
@@ -148,8 +159,13 @@ export class TransferManager {
     }
     const batch = newXid();
     const out: Transfer[] = [];
+    const label = `${plural(files.length, 'file')} · ${formatBytes(total)}`;
     for (const id of recipients) {
-      if (!this.deps.isFriend(id) || !this.deps.isOnline(id)) continue;
+      if (!this.deps.isFriend(id)) continue;
+      const online = this.deps.isOnline(id);
+      // termdrop isn't open on their side, but another app is: they hear about it there
+      const parked = !online && (this.deps.reachable?.(id) ?? false);
+      if (!online && !parked) continue;
       const xid = newXid();
       const t: Transfer = {
         xid,
@@ -165,10 +181,18 @@ export class TransferManager {
         fileIndex: 0,
         speed: 0,
         paths: files.map((f) => f.path),
+        ...(parked ? { parked: true } : {}),
       };
       this.transfers.set(xid, t);
       this.runtime.set(xid, { abort: new AbortController(), files, bytes: 0, fileIndex: 0, movedAt: this.now() });
-      if (this.deps.send(id, { t: 'offer', xid, files: wireFiles, total })) out.push(t);
+      if (parked) {
+        this.deps.noticeOffer?.(id, xid, `wants to send you ${label}`);
+        const timer = setTimeout(() => {
+          if (this.transfers.get(xid)?.parked) this.apply(xid, { type: 'expired', text: `${t.peerName} didn't open termdrop`, at: this.now() });
+        }, this.t.parkMs);
+        timer.unref();
+        out.push(t);
+      } else if (this.deps.send(id, { t: 'offer', xid, files: wireFiles, total })) out.push(t);
       else this.apply(xid, { type: 'failed', text: `${t.peerName} went offline`, at: this.now() });
     }
     this.trim();
@@ -265,10 +289,22 @@ export class TransferManager {
     this.run(link.xid, link);
   }
 
+  /** A friend's termdrop connected: offers that waited for it go out now. */
+  onPeerOnline(id: string): void {
+    for (const t of this.list()) {
+      if (t.peerId !== id || !t.parked || t.status !== 'waiting') continue;
+      if (!this.deps.send(id, { t: 'offer', xid: t.xid, files: t.files, total: t.total })) continue;
+      const { parked: _parked, ...rest } = t;
+      this.transfers.set(t.xid, rest);
+      this.deps.withdrawOffer?.(id, t.xid);
+    }
+    this.deps.changed();
+  }
+
   /** The friend session ended: unanswered offers expire. Running transfers live on their own connection. */
   onPeerOffline(id: string): void {
     for (const t of this.list()) {
-      if (t.peerId !== id) continue;
+      if (t.peerId !== id || t.parked) continue;
       if (isPending(t.status)) {
         this.apply(t.xid, { type: 'expired', text: `${t.peerName} went offline`, at: this.now() });
       }
@@ -338,6 +374,7 @@ export class TransferManager {
     if (!quiet) {
       this.deps.toast(`${name} wants to send you ${label}`, 'info');
       this.deps.notify('termdrop', `${name} wants to send you ${label}`);
+      this.deps.announce?.(from, m.xid, `wants to send you ${label}`);
     }
     this.deps.changed();
   }
@@ -459,6 +496,7 @@ export class TransferManager {
   }
 
   private ended(t: Transfer): void {
+    if (t.parked) this.deps.withdrawOffer?.(t.peerId, t.xid);
     const rt = this.runtime.get(t.xid);
     if (rt) {
       if (rt.linkTimer) clearTimeout(rt.linkTimer);
